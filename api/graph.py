@@ -13,6 +13,7 @@ from api.config import Config
 from api.extensions import db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 # pylint: disable=broad-exception-caught
 
 class TableDescription(BaseModel):
@@ -38,9 +39,9 @@ class Descriptions(BaseModel):
 
 async def get_db_description(graph_id: str) -> tuple[str, str]:
     """Get the database description from the graph."""
-    print(f"Getting DB description for graph: {graph_id}")
+    logger.debug("Getting DB description for graph: %s", graph_id)
     graph = db.select_graph(graph_id)
-    print(f"Graph: {graph}")
+    logger.debug("Graph handle: %s", graph)
     query_result = await graph.query(
         """
         MATCH (d:Database)
@@ -51,7 +52,7 @@ async def get_db_description(graph_id: str) -> tuple[str, str]:
     if not query_result.result_set:
         return ("No description available for this database.",
                 "No URL available for this database.")
-    print(f"DB description: {query_result.result_set}")
+    logger.debug("DB description rows: %s", query_result.result_set)
     return (query_result.result_set[0][0],
             query_result.result_set[0][1])  # Return the first result's description
 
@@ -381,7 +382,7 @@ def _get_unique_tables(tables_list):
                 table_info[2] = "Foreign keys: " + table_info[2]
                 unique_tables[table_name] = table_info
         except Exception as e:  # pylint: disable=broad-exception-caught
-            print(f"Error: {table_info}, Exception: {e}")
+            logger.warning("Error deduplicating table %s: %s", table_info, e)
 
     # Return the values (the unique table info lists)
     return list(unique_tables.values())

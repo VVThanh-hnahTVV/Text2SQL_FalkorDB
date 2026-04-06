@@ -320,7 +320,7 @@ const Index = () => {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex min-h-full flex-1 bg-background overflow-x-hidden">
       {/* Hidden file input for schema upload */}
       <input
         ref={fileInputRef}
@@ -347,10 +347,13 @@ const Index = () => {
         sidebarWidth={sidebarWidth}
       />
       
-      {/* Main Content */}
-      <div className="flex flex-1 flex-col transition-all duration-300" style={getMainContentStyles()}>
+      {/* Main Content — min-h-0 lets nested flex children shrink so chat scrolls inside the column */}
+      <div
+        className="flex min-h-full flex-1 flex-col overflow-x-hidden transition-all duration-300"
+        style={getMainContentStyles()}
+      >
         {/* Header */}
-        <header className="border-b border-border">
+        <header className="shrink-0 border-b border-border">
           {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between p-6">
             <div className="flex items-center gap-4">
@@ -485,7 +488,7 @@ const Index = () => {
         </header>
 
         {/* Sub-header for controls */}
-        <div className="px-6 py-4 border-b border-border">
+        <div className="shrink-0 border-b border-border px-6 py-4">
           <div className="flex gap-3 flex-wrap md:flex-nowrap">
               <Button
                 variant="outline"
@@ -568,10 +571,11 @@ const Index = () => {
           </div>
         </div>
         
-        {/* Chat Interface - Full remaining height */}
-        <div className="flex-1 overflow-hidden flex justify-center">
-          <div className="h-full w-full max-w-7xl md:px-[15px]">
+        {/* Chat — h-full + min-h-0 so grid/flex children get a definite height */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+          <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col overflow-x-hidden md:px-[15px]">
             <ChatInterface
+              className="min-h-0 flex-1"
               disabled={isRefreshingSchema}
               onProcessingChange={setIsChatProcessing}
               useMemory={useMemory}

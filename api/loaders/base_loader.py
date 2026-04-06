@@ -1,7 +1,7 @@
 """Base loader module providing abstract base class for data loaders."""
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, List, Any, TYPE_CHECKING
+from typing import AsyncGenerator, List, Any, TYPE_CHECKING, Optional
 
 
 class BaseLoader(ABC):
@@ -24,7 +24,12 @@ class BaseLoader(ABC):
     @staticmethod
     @abstractmethod
     def _execute_sample_query(
-        cursor, table_name: str, col_name: str, sample_size: int = 3
+        cursor,
+        table_name: str,
+        col_name: str,
+        sample_size: int = 3,
+        *,
+        data_type: Optional[str] = None,
     ) -> List[Any]:
         """
         Execute query to get random sample values for a column.
@@ -34,6 +39,7 @@ class BaseLoader(ABC):
             table_name: Name of the table
             col_name: Name of the column
             sample_size: Number of random samples to retrieve (default: 3)
+            data_type: information_schema data type (e.g. json); used by PostgreSQL
 
         Returns:
             List of sample values
@@ -41,7 +47,13 @@ class BaseLoader(ABC):
 
     @classmethod
     def extract_sample_values_for_column(
-        cls, cursor, table_name: str, col_name: str, sample_size: int = 3
+        cls,
+        cursor,
+        table_name: str,
+        col_name: str,
+        sample_size: int = 3,
+        *,
+        data_type: Optional[str] = None,
     ) -> List[Any]:
         """
         Extract random sample values for a column to provide balanced descriptions.
@@ -51,12 +63,15 @@ class BaseLoader(ABC):
             table_name: Name of the table
             col_name: Name of the column
             sample_size: Number of random samples to retrieve (default: 3)
+            data_type: information_schema data type for DB-specific sampling
 
         Returns:
             List of sample values (converted to strings), or empty list
         """
         # Get sample values using database-specific implementation
-        sample_values = cls._execute_sample_query(cursor, table_name, col_name, sample_size)
+        sample_values = cls._execute_sample_query(
+            cursor, table_name, col_name, sample_size, data_type=data_type
+        )
 
         if sample_values:
             # Check first value type to avoid objects like dict/bytes

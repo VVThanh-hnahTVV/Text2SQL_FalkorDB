@@ -329,7 +329,7 @@ const Settings = () => {
   };
 
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+    <div className="flex h-full max-h-full min-h-0 flex-1 bg-background text-foreground overflow-hidden">
       {/* Left Sidebar */}
       <Sidebar 
         onSchemaClick={() => setShowSchemaViewer(!showSchemaViewer)}

@@ -2,10 +2,13 @@
 # pylint: disable=line-too-long,trailing-whitespace
 
 import asyncio
+import csv
 import json
 import logging
 import os
 import time
+from io import StringIO
+from typing import Any
 
 from pydantic import BaseModel
 from redis import ResponseError
@@ -21,11 +24,45 @@ from api.loaders.postgres_loader import PostgresLoader
 from api.loaders.mysql_loader import MySQLLoader
 from api.memory.graphiti_tool import MemoryTool
 from api.sql_utils import SQLIdentifierQuoter, DatabaseSpecificQuoter
+from api.visualization import VisualizationService, analyze_csv_schema
 
 # Use the same delimiter as in the JavaScript
 MESSAGE_DELIMITER = "|||FALKORDB_MESSAGE_BOUNDARY|||"
 
 GENERAL_PREFIX = os.getenv("GENERAL_PREFIX")
+
+
+def _query_results_to_csv(query_results: list[dict[str, Any]]) -> str:
+    """Convert list-of-dict SQL results into CSV string."""
+    if not query_results:
+        return ""
+
+    fieldnames = [str(field) for field in query_results[0].keys()]
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in query_results:
+        writer.writerow({name: row.get(name) for name in fieldnames})
+    return buffer.getvalue()
+
+
+def _build_visualization_payload(
+    query_results: list[dict[str, Any]], question: str
+) -> dict[str, Any]:
+    """Build CSV + schema + DSL payload while preserving failures gracefully."""
+    csv_data = _query_results_to_csv(query_results)
+    schema_info = analyze_csv_schema(csv_data)
+    visualization_service = VisualizationService()
+    dsl = visualization_service.generate_visualization(
+        csv_data=csv_data,
+        question=question,
+        schema_info=schema_info,
+    )
+    return {
+        "csv_data": csv_data,
+        "schema_info": schema_info,
+        "visualization_dsl": dsl.to_dict(),
+    }
 
 class GraphData(BaseModel):
     """Graph data model.
@@ -314,11 +351,11 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
         relevancy_reason = answer_rel.get(
             "reason", "Could not determine relevancy from model response."
         )
-        print(answer_rel)
+        logging.debug("Relevancy result: %s", answer_rel)
 
         if relevancy_status != "On-topic": # pylint: disable=too-many-nested-blocks
             # Cancel the find task since query is off-topic
-            print("Off-topic query: ", relevancy_status)
+            logging.info("Off-topic query: %s", relevancy_status)
             find_task.cancel()
             try:
                 await find_task
@@ -338,8 +375,7 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
                          overall_elapsed)
         else:
             # Query is on-topic, wait for find results
-            print("Calling to find task")
-            print(relevancy_status)
+            logging.debug("On-topic (%s); starting find task", relevancy_status)
             result = await find_task
 
             logging.info("Calling to analysis agent with query: %s",
@@ -348,7 +384,7 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
             memory_context = None
             memory_tool = None
             if memory_tool_task:
-                print('Memory')
+                logging.debug("Loading memory context")
                 try:
                     memory_tool = await memory_tool_task
                     memory_context = await memory_tool.search_memories(
@@ -362,7 +398,7 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
                     memory_tool = None
 
             logging.info("Starting SQL generation with analysis agent")
-            print('Get answer')
+            logging.debug("Running analysis agent for SQL generation")
             # COMPLETION_MODEL = "ollama/duckdb-nsql:latest"
             
             answer_an = agent_an.get_analysis(
@@ -567,10 +603,15 @@ What this will do:
                             }) + MESSAGE_DELIMITER
 
                         if len(query_results) != 0:
+                            visualization_payload = _build_visualization_payload(
+                                query_results=query_results,
+                                question=queries_history[-1] if queries_history else "",
+                            )
                             yield json.dumps(
                                 {
                                     "type": "query_result",
                                     "data": query_results,
+                                    "visualization": visualization_payload,
                                     "final_response": False
                                 }
                             ) + MESSAGE_DELIMITER
@@ -836,10 +877,15 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
                     loader_class.is_schema_modifying_query(sql_query)
                 )
                 query_results = loader_class.execute_sql_query(sql_query, db_url)
+                visualization_payload = _build_visualization_payload(
+                    query_results=query_results,
+                    question=queries_history[-1] if queries_history else "Destructive operation",
+                )
                 yield json.dumps(
                     {
                         "type": "query_result",
                         "data": query_results,
+                        "visualization": visualization_payload,
                     }
                 ) + MESSAGE_DELIMITER
 

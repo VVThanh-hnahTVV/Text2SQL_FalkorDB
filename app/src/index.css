@@ -265,10 +265,27 @@ Based on shadcn/ui Clean Slate theme with OKLch color space for perceptual unifo
     @apply border-border;
   }
 
+  /* TEMP (debug): whole-page scroll + always-visible vertical scrollbar on html. Re-tighten after layout fix. */
+  html {
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: scroll;
+  }
+
   body {
+    min-height: 100%;
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  #root {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
   }
 }
 

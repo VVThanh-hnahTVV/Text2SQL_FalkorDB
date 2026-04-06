@@ -33,6 +33,13 @@ class BaseAgent:  # pylint: disable=too-few-public-methods
     def __init__(self, queries_history: list, result_history: list,
                  custom_api_key: str = None, custom_model: str = None):
         """Initialize the agent with query and result history."""
+        self.queries_history = (
+            list(queries_history) if queries_history is not None else []
+        )
+        self.result_history = (
+            list(result_history) if result_history is not None else []
+        )
+
         if result_history is None:
             self.messages = []
         else:

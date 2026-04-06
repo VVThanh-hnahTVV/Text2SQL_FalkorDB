@@ -4,10 +4,11 @@ Saves summarized conversations with user and database nodes.
 """
 # pylint: disable=all
 import asyncio
+import hashlib
 import logging
 import os
 import uuid
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime
 
 from redis import RedisError
@@ -24,7 +25,9 @@ from graphiti_core.nodes import EpisodeType
 from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.cross_encoder import OpenAIRerankerClient
+from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
+from graphiti_core.embedder.client import EmbedderClient
 
 
 from litellm import completion
@@ -46,6 +49,46 @@ def extract_embedding_model_name(full_model_name: str) -> str:
         return full_model_name
 
 
+def _normalize_chat_history(
+    history: Union[Tuple[Any, Any], List[Any], None],
+) -> Tuple[List[str], List[str]]:
+    """
+    Coerce API chat history to (queries, results). `result` may be None if the client
+    omits it — len(None) would raise in summarization paths.
+    """
+    if history is None:
+        return [], []
+    if not isinstance(history, (list, tuple)) or len(history) < 1:
+        return [], []
+    raw_q = history[0]
+    raw_r = history[1] if len(history) > 1 else None
+    queries = list(raw_q) if raw_q is not None else []
+    results = list(raw_r) if raw_r is not None else []
+    return queries, results
+
+
+def falkor_memory_graph_name(user_id: str) -> str:
+    """
+    Stable FalkorDB graph name / Graphiti episode group_id.
+
+    user_id is often base64 (may include +, /, =, -). Those break RediSearch TAG
+    filters built by graphiti-core (@group_id:"..."). Use a hex digest instead.
+    """
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:32]
+    return f"qwmem{digest}"
+
+
+def groq_native_model_id() -> str:
+    """
+    Model id for graphiti-core GroqClient (Groq SDK, no LiteLLM `groq/` prefix).
+    Mirrors api.config.Config: COMPLETION_MODEL wins, else GROQ_MODEL, else openai/gpt-oss-120b.
+    """
+    completion = os.getenv("COMPLETION_MODEL", "").strip()
+    if completion:
+        return completion.removeprefix("groq/")
+    return os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").removeprefix("groq/")
+
+
 class MemoryTool:
     """Memory management tool for handling user memories and interactions."""
 
@@ -59,7 +102,7 @@ class MemoryTool:
 
     def __init__(self, user_id: str, graph_id: str):
         # Create FalkorDB driver with user-specific database
-        self.memory_db_name = f"{user_id}-memory"
+        self.memory_db_name = falkor_memory_graph_name(user_id)
         falkor_driver = FalkorDriver(falkor_db=db, database=self.memory_db_name)
 
        
@@ -118,7 +161,7 @@ class MemoryTool:
                 user_node_data = {
                     'uuid': user_uuid,
                     'name': user_node_name,
-                    'group_id': '\\_',
+                    'group_id': '_',
                     'created_at': datetime.now().isoformat(),
                     'summary': 'The User is using QueryWeaver',
                     'name_embedding': user_name_embedding
@@ -155,7 +198,7 @@ class MemoryTool:
                 database_node_data = {
                     'uuid': database_uuid,
                     'name': database_node_name,
-                    'group_id': '\\_',
+                    'group_id': '_',
                     'created_at': datetime.now().isoformat(),
                     'summary': f'Database {database_name} available for querying by user {user_id}',
                     'name_embedding': database_name_embedding
@@ -241,12 +284,13 @@ class MemoryTool:
                 An updated user summary.
                 """
         try:
+            queries_hist, results_hist = _normalize_chat_history(history)
 
-            if len(history[1]) == 0:
+            if len(results_hist) == 0:
                 messages = [{"role": "user", "content": prompt}]
             else:
                 messages = []
-                for query, result in zip(history[0], history[1]):
+                for query, result in zip(queries_hist, results_hist):
                     messages.append({"role": "user", "content": query})
                     messages.append({"role": "assistant", "content": result})
             messages.append({"role": "user", "content": prompt})
@@ -257,7 +301,8 @@ class MemoryTool:
             )
             
             # Parse the direct text response (no JSON parsing needed)
-            content = response.choices[0].message.content.strip()
+            raw_content = response.choices[0].message.content
+            content = (raw_content or "").strip()
             query = """
             MATCH (u:Entity {name: $user_id})
             SET u.summary = $summary
@@ -266,6 +311,7 @@ class MemoryTool:
             await driver.execute_query(query, user_id=self.user_id, summary=content)
             return True
         except Exception as e:
+            logging.warning("update_user_information LLM failed: %s", e)
             return False
 
     async def add_new_memory(self, conversation: Dict[str, Any], history: Tuple[List[str], List[str]]) -> bool:
@@ -284,7 +330,10 @@ class MemoryTool:
                 episode_body=f"Database {database_name}:\n{database_summary}",
                 source=EpisodeType.message,
                 reference_time=datetime.now(),
-                source_description=f"Graph-oriented facts about Database: {database_name} from User: {user_id} interaction"
+                source_description=f"Graph-oriented facts about Database: {database_name} from User: {user_id} interaction",
+                # FalkorDB default group_id in graphiti-core is "\\_" which fails validate_group_id;
+                # must match FalkorDriver.database (self.memory_db_name).
+                group_id=self.memory_db_name,
             )
             
             update_user_task = self.update_user_information(conversation, history=history)
@@ -664,7 +713,11 @@ class MemoryTool:
             logging.error("Error cleaning memory: %s", e)
             return 0
 
-    async def summarize_conversation(self, conversation: Dict[str, Any], history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def summarize_conversation(
+        self,
+        conversation: Dict[str, Any],
+        history: Union[Tuple[List[str], List[str]], List[Any], None],
+    ) -> Dict[str, Any]:
         """
         Use LLM to summarize the conversation and extract database-oriented insights.
         
@@ -710,12 +763,13 @@ class MemoryTool:
                 """
         
         try:
+            queries_hist, results_hist = _normalize_chat_history(history)
 
-            if len(history[1]) == 0:
+            if len(results_hist) == 0:
                 messages = [{"role": "user", "content": prompt}]
             else:
                 messages = []
-                for query, result in zip(history[0], history[1]):
+                for query, result in zip(queries_hist, results_hist):
                     messages.append({"role": "user", "content": query})
                     messages.append({"role": "assistant", "content": result})
             messages.append({"role": "user", "content": prompt})
@@ -726,7 +780,8 @@ class MemoryTool:
             )
             
             # Parse the direct text response (no JSON parsing needed)
-            content = response.choices[0].message.content.strip()
+            raw_content = response.choices[0].message.content
+            content = (raw_content or "").strip()
             return {
                 "database_summary": content
             }
@@ -789,6 +844,32 @@ def get_azure_openai_clients():
 
     return llm_client_azure, embedding_client_azure, config
 
+
+class LiteLLMEmbedderClient(EmbedderClient):
+    """
+    Graphiti embedder wrapper around QueryWeaver's `Config.EMBEDDING_MODEL` (litellm).
+
+    This avoids hard dependency on `OPENAI_API_KEY` when users run Groq/other providers.
+    """
+
+    async def create(self, input_data: str | list[str]):
+        embeddings = Config.EMBEDDING_MODEL.embed(input_data)
+        # `Config.EMBEDDING_MODEL.embed` always returns a list of embeddings.
+        return embeddings[0]
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        return Config.EMBEDDING_MODEL.embed(input_data_list)
+
+
+class NoOpCrossEncoderClient(CrossEncoderClient):
+    """Fallback cross-encoder that preserves ordering without calling any LLM."""
+
+    async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
+        # Graphiti expects a list of tuples sorted by score desc.
+        # We return stable scores (all equal), effectively disabling re-ranking.
+        return [(p, 0.0) for p in passages]
+
+
 def create_graphiti_client(falkor_driver: FalkorDriver) -> Graphiti:
     """Create a Graphiti client configured with Azure OpenAI."""
     # Initialize Graphiti with Azure OpenAI clients
@@ -819,25 +900,50 @@ def create_graphiti_client(falkor_driver: FalkorDriver) -> Graphiti:
                 client=llm_client_azure,
             ),
         )
-    elif Config.LLM_PROVIDER == "openai":
-        # OpenAI provider — use OpenAIEmbedder with configured model
-        embedding_model_name = extract_embedding_model_name(Config.EMBEDDING_MODEL_NAME)
+
+    else:
+        # Non-Azure setup:
+        # - Always use LiteLLM embedder to avoid requiring `OPENAI_API_KEY`.
+        # - Provide a no-op cross-encoder to prevent Graphiti from defaulting to OpenAI reranking.
+        #
+        # LLM client selection is based on available API keys.
+        embedder = LiteLLMEmbedderClient()
+        cross_encoder = NoOpCrossEncoderClient()
+
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        llm_client = None
+        if groq_api_key:
+            # Lazy import so projects without groq deps don't crash at import time.
+            from graphiti_core.llm_client.groq_client import GroqClient
+
+            llm_client = GroqClient(
+                config=LLMConfig(api_key=groq_api_key, model=groq_native_model_id()),
+            )
+        elif gemini_api_key:
+            from graphiti_core.llm_client.gemini_client import GeminiClient
+
+            llm_client = GeminiClient(config=LLMConfig(api_key=gemini_api_key))
+        elif anthropic_api_key:
+            from graphiti_core.llm_client.anthropic_client import AnthropicClient
+
+            llm_client = AnthropicClient(config=LLMConfig(api_key=anthropic_api_key))
+        elif openai_api_key:
+            llm_client = OpenAIClient(config=LLMConfig(api_key=openai_api_key))
+        else:
+            raise ValueError(
+                "Missing LLM API key for Graphiti memory. "
+                "Set one of OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY."
+            )
 
         graphiti_client = Graphiti(
             graph_driver=falkor_driver,
-            embedder=OpenAIEmbedder(
-                config=OpenAIEmbedderConfig(
-                    embedding_model=embedding_model_name,
-                    embedding_dim=1536
-                )
-            ),
-        )
-    else:
-        # Non-OpenAI/Azure providers (Gemini, Anthropic, Ollama, Cohere):
-        # Graphiti memory requires OpenAI-compatible embeddings.
-        # Use LiteLLM embeddings via Config instead.
-        graphiti_client = Graphiti(
-            graph_driver=falkor_driver,
+            llm_client=llm_client,
+            embedder=embedder,
+            cross_encoder=cross_encoder,
         )
 
     return graphiti_client

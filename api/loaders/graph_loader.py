@@ -1,8 +1,11 @@
 """Graph loader module for loading data into graph databases."""
 
 import json
+import logging
 
 import tqdm
+
+logger = logging.getLogger(__name__)
 
 from api.config import Config
 from api.extensions import db
@@ -52,7 +55,7 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
         )
         await graph.query("CREATE INDEX FOR (p:Table) ON (p.name)")
     except Exception as e:  # pylint: disable=broad-exception-caught
-        print(f"Error creating vector indices: {str(e)}")
+        logger.warning("Error creating vector indices: %s", e)
 
     db_des = generate_db_description(db_name=db_name, table_names=list(entities.keys()))
     await graph.query(
@@ -110,7 +113,7 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
                     embedding_result = embedding_model.embed(batch)
                     embed_columns.extend(embedding_result)
             except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Error creating embeddings: {str(e)}")
+                logger.warning("Error creating embeddings: %s", e)
                 batch_flag = False
 
         # Create column nodes
@@ -189,5 +192,5 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
                     },
                 )
             except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Warning: Could not create relationship: {str(e)}")
+                logger.warning("Could not create relationship: %s", e)
                 continue

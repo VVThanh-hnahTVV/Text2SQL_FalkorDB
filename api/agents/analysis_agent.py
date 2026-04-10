@@ -21,6 +21,7 @@ class AnalysisAgent(BaseAgent):
     ) -> dict:
         """Get analysis of user query against database schema."""
         formatted_schema = self._format_schema(combined_tables)
+        print(user_query, formatted_schema, db_description, instructions, memory_context, database_type, user_rules_spec)
         # Add system message with database type if not already present
         if not self.messages or self.messages[0].get("role") != "system":
             self.messages.insert(0, {

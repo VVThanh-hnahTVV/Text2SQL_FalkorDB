@@ -44,7 +44,7 @@ def create_combined_description(  # pylint: disable=too-many-locals
         batch_size (int): Number of tables to process per batch when calling the LLM (default: 10).
     Returns:
         Dict[str, TableInfo]: Updated mapping containing descriptions.
-    """
+     """
     if not isinstance(table_info, dict):
         raise TypeError("table_info must be a dictionary keyed by table name.")
 

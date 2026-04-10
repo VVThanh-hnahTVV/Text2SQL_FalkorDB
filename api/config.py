@@ -84,7 +84,7 @@ class Config:
         COMPLETION_MODEL = _user_completion or _with_prefix(
             os.getenv("OLLAMA_MODEL"), "ollama")
         EMBEDDING_MODEL_NAME = _user_embedding or _with_prefix(
-            os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text-v2-moe:latest"), "ollama")
+            os.getenv("OLLAMA_EMBEDDING_MODEL", "jeffh/intfloat-e5-base-v2:f32 "), "ollama")
     elif os.getenv("GROQ_API_KEY"):
         LLM_PROVIDER = "openai"
         AZURE_FLAG = False

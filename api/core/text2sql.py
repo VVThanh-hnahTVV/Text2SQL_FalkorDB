@@ -138,6 +138,9 @@ def sanitize_log_input(value: str) -> str:
 
     return value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
 
+DEFAULT_USER_ID = "default"
+
+
 def _graph_name(user_id: str, graph_id:str) -> str:
 
     graph_id = graph_id.strip()[:200]

@@ -14,25 +14,16 @@ export const API_CONFIG = {
   
   // Endpoints
   ENDPOINTS: {
-    // Authentication
-    AUTH_STATUS: '/auth-status',
-    LOGIN_GOOGLE: '/login/google',
-    LOGIN_GITHUB: '/login/github',
-    LOGOUT: '/logout',
-    
     // Graph/Database management
     GRAPHS: '/graphs',
     GRAPH_BY_ID: (id: string) => `/graphs/${id}`,
     UPLOAD_SCHEMA: '/upload',
     DELETE_GRAPH: (id: string) => `/graphs/${id}`,
     CONNECT_DATABASE: '/database',
-    
+
     // Chat/Query
     CHAT: '/chat',
     CONFIRM: '/confirm',
-    
-    // User
-    USER: '/user',
   },
 };
 

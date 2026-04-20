@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { useDatabase } from "@/contexts/DatabaseContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useChat } from "@/contexts/ChatContext";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -101,8 +100,6 @@ const ChatInterface = ({
       </div>
     </div>
   );
-
-  const { user } = useAuth();
 
   const suggestions = [
     "Show me five customers",
@@ -544,7 +541,6 @@ const ChatInterface = ({
               visualizationData={msg.visualizationData}
               analysisInfo={msg.analysisInfo}
               confirmationData={msg.confirmationData}
-              user={user}
               onConfirm={msg.type === 'confirmation' ? () => handleConfirmDestructive(msg.id) : undefined}
               onCancel={msg.type === 'confirmation' ? () => handleCancelDestructive(msg.id) : undefined}
             />

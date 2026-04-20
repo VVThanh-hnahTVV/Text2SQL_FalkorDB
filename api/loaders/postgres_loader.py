@@ -12,7 +12,9 @@ from psycopg2 import sql
 import tqdm
 
 from api.loaders.base_loader import BaseLoader  # pylint: disable=import-error
-from api.loaders.graph_loader import load_to_graph  # pylint: disable=import-error
+from api.loaders.graph_loader import load_to_graph  
+
+from pprint import pprint
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -142,9 +144,11 @@ class PostgresLoader(BaseLoader):
         """
         try:
             parsed = urlparse(connection_url)
+
             query_params = parse_qs(parsed.query)
 
             options = query_params.get('options', [])
+         
             if not options:
                 return 'public'
 
@@ -200,6 +204,7 @@ class PostgresLoader(BaseLoader):
 
             # Extract database name from connection URL
             db_name = connection_url.split('/')[-1]
+            print('PostgresLoader.load: db_name', db_name)
             if '?' in db_name:
                 db_name = db_name.split('?')[0]
 
@@ -269,6 +274,8 @@ class PostgresLoader(BaseLoader):
         """, (schema, schema))
 
         tables = cursor.fetchall()
+        print('PostgresLoader.extract_tables_info: tables')
+        pprint(tables, width=120, compact=False)
 
         for table_name, table_comment in tqdm.tqdm(tables, desc="Extracting table information"):
             table_name = table_name.strip()
@@ -291,7 +298,8 @@ class PostgresLoader(BaseLoader):
                 'foreign_keys': foreign_keys,
                 'col_descriptions': col_descriptions
             }
-
+        # print('PostgresLoader.extract_tables_info: entities')
+        # pprint(entities, width=120, compact=False)
         return entities
 
     @staticmethod
@@ -384,7 +392,8 @@ class PostgresLoader(BaseLoader):
                 'default': column_default,
                 'sample_values': sample_values
             }
-
+        print('PostgresLoader.extract_columns_info: table_name', table_name)
+        pprint(columns_info, width=120, compact=False)
 
         return columns_info
 

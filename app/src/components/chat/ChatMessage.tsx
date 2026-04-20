@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Database, Search, Code, MessageSquare, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Database, Search, Code, MessageSquare, AlertTriangle, Copy, Check, User } from 'lucide-react';
 import Plot from 'react-plotly.js';
 import type { Data, Layout } from 'plotly.js';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,8 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { User as UserType } from '@/types/api';
-
 interface Step {
   icon: 'search' | 'database' | 'code' | 'message';
   text: string;
@@ -58,7 +56,6 @@ interface ChatMessageProps {
     message: string;
   };
   progress?: number; // Progress percentage for AI steps
-  user?: UserType | null; // User info for avatar
   onConfirm?: () => void;
   onCancel?: () => void;
 }
@@ -547,7 +544,7 @@ const QueryResultsTable = ({ queryData }: { queryData: any[] }) => (
 );
 
 const ChatMessage = ({
-  type, content, steps, queryData, visualizationData, analysisInfo, confirmationData, progress, user, onConfirm, onCancel,
+  type, content, steps, queryData, visualizationData, analysisInfo, confirmationData, progress, onConfirm, onCancel,
 }: ChatMessageProps) => {
   const [copied, setCopied] = useState(false);
 
@@ -639,18 +636,17 @@ const ChatMessage = ({
   if (type === 'user') {
     return (
       <div className="px-6" data-testid="user-message">
-        <div className="flex justify-end gap-3 mb-6">
-          <div className="flex-1 max-w-xl">
-            <Card className="bg-muted border-border inline-block float-right">
+        <div className="flex justify-end gap-3 mb-6 items-start">
+          <div className="max-w-xl">
+            <Card className="bg-muted border-border inline-block">
               <CardContent className="p-3">
                 <p className="text-foreground text-base leading-relaxed">{content}</p>
               </CardContent>
             </Card>
           </div>
-          <Avatar className="h-10 w-10 border-2 border-primary flex-shrink-0">
-            <AvatarImage src={user?.picture} alt={user?.name || user?.email} />
-            <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-              {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+          <Avatar className="w-8 h-8 flex-shrink-0">
+            <AvatarFallback className="bg-muted text-muted-foreground">
+              <User className="w-4 h-4" />
             </AvatarFallback>
           </Avatar>
         </div>

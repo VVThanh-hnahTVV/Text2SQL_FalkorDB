@@ -3,8 +3,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   PanelLeft,
-  BookOpen,
-  LifeBuoy,
   Waypoints,
   Sliders,
 } from 'lucide-react';
@@ -142,8 +140,6 @@ const Sidebar = ({ className, onSchemaClick, isSchemaOpen, isCollapsed = false, 
       
       <nav className="flex flex-col items-center gap-4 px-2 py-4">
         <SidebarIcon icon={Sliders} label="Settings" active={isSettingsOpen} onClick={handleSettingsClick} testId="settings-button" />
-        <SidebarIcon icon={BookOpen} label="Documentation" href="https://docs.falkordb.com/" testId="documentation-link" />
-        <SidebarIcon icon={LifeBuoy} label="Support" href="https://discord.com/invite/jyUgBweNQz" testId="support-link" />
       </nav>
     </aside>
     </>

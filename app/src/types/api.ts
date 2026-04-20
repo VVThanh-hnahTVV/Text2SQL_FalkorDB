@@ -1,20 +1,5 @@
 // API Types and Interfaces
 
-// User types
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-  picture?: string;
-  provider?: 'google' | 'github';
-}
-
-// Authentication types
-export interface AuthStatus {
-  authenticated: boolean;
-  user?: User;
-}
-
 // Graph/Database types
 export interface Graph {
   id: string;

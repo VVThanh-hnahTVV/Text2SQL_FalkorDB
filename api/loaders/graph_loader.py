@@ -66,7 +66,9 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
     print("Starting to create database node description")
     db_des = generate_db_description(db_name=db_name, table_names=list(entities.keys()))
     # db_des = "This is a test database"
-    # pprint(db_des, width=120, compact=False)
+    print("**********DB Description**********")
+    pprint(db_des, width=120, compact=False)
+    print("**********DB Description**********")
     await graph.query(
         """
         CREATE (d:Database {

@@ -96,7 +96,8 @@ class Config:
         LLM_PROVIDER = "openai"
         AZURE_FLAG = False
         COMPLETION_MODEL = _user_completion or "openai/gpt-4.1-nano"
-        EMBEDDING_MODEL_NAME = _user_embedding or "openai/text-embedding-3-small"
+        EMBEDDING_MODEL_NAME = _user_embedding or _with_prefix(
+            os.getenv("OLLAMA_EMBEDDING_MODEL", "jeffh/intfloat-e5-base-v2:f32 "), "ollama")
     elif os.getenv("GEMINI_API_KEY"):
         LLM_PROVIDER = "gemini"
         AZURE_FLAG = False
@@ -135,6 +136,8 @@ class Config:
         COMPLETION_MODEL,
         EMBEDDING_MODEL_NAME,
     )
+    print("**********COMPLETION_MODEL**********", COMPLETION_MODEL)
+    print("**********EMBEDDING_MODEL_NAME**********", EMBEDDING_MODEL_NAME)
 
     DB_MAX_DISTINCT: int = 100  # pylint: disable=invalid-name
     DB_UNIQUENESS_THRESHOLD: float = 0.5  # pylint: disable=invalid-name

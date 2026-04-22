@@ -44,7 +44,7 @@ def create_combined_description(  # pylint: disable=too-many-locals
         batch_size (int): Number of tables to process per batch when calling the LLM (default: 10).
     Returns:
         Dict[str, TableInfo]: Updated mapping containing descriptions.
-    """
+     """
     if not isinstance(table_info, dict):
         raise TypeError("table_info must be a dictionary keyed by table name.")
 
@@ -69,7 +69,9 @@ def create_combined_description(  # pylint: disable=too-many-locals
         table_prop = table_prop.copy()
         table_prop.pop("col_descriptions", None)
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system",
+             "content": system_prompt
+            },
             {
                 "role": "user",
                 "content": user_prompt_template.format(
@@ -159,5 +161,6 @@ def generate_db_description(
         n=1,
         stop=None,
     )
+    # print("Utils: generate_db_description response", response)
     description = response.choices[0].message["content"]
     return description

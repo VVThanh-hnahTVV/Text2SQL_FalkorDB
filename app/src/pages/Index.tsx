@@ -1,17 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Trash2, RefreshCw, PanelLeft } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import ChatInterface from "@/components/chat/ChatInterface";
-import LoginModal from "@/components/modals/LoginModal";
 import DatabaseModal from "@/components/modals/DatabaseModal";
 import DeleteDatabaseModal from "@/components/modals/DeleteDatabaseModal";
-import TokensModal from "@/components/modals/TokensModal";
 import SchemaViewer from "@/components/schema";
 import LoadingSpinner from "@/components/ui/loading-spinner";
-import { useAuth } from "@/contexts/AuthContext";
 import { useDatabase } from "@/contexts/DatabaseContext";
 import { DatabaseService } from "@/services/database";
 import { useToast } from "@/components/ui/use-toast";
@@ -21,18 +17,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
 const Index = () => {
-  const { isAuthenticated, isLoading: authLoading, logout, user } = useAuth();
   const { selectedGraph, graphs, selectGraph, uploadSchema } = useDatabase();
   const { toast } = useToast();
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSchemaViewer, setShowSchemaViewer] = useState(false);
-  const [showTokensModal, setShowTokensModal] = useState(false);
   // userRulesSpec is now fetched from the graph database per query
   const [useMemory, setUseMemory] = useState(() => {
     // Load from localStorage on init, default to true
@@ -116,19 +108,6 @@ const Index = () => {
 
   // No need to fetch rules - we just pass the toggle state to backend
 
-  // Show login modal when not authenticated after loading completes
-  useEffect(() => {
-    // Only auto-open the login modal once per user/session to avoid locking
-    // the SPA when the backend is down or in demo mode. Allow users to
-    // dismiss it and remember that choice in sessionStorage.
-    if (!authLoading && !isAuthenticated) {
-      const dismissed = sessionStorage.getItem('loginModalDismissed');
-      if (!dismissed) {
-        setShowLoginModal(true);
-      }
-    }
-  }, [authLoading, isAuthenticated]);
-
   const handleConnectDatabase = () => {
     if (isRefreshingSchema || isChatProcessing) return;
     setShowDatabaseModal(true);
@@ -195,24 +174,6 @@ const Index = () => {
       toast({
         title: "Delete Failed",
         description: error instanceof Error ? error.message : "Failed to delete database",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      toast({
-        title: "Logged Out",
-        description: "You have been successfully logged out",
-      });
-      // Refresh to reset state
-      window.location.reload();
-    } catch (error) {
-      toast({
-        title: "Logout Failed",
-        description: error instanceof Error ? error.message : "Failed to logout",
         variant: "destructive",
       });
     }
@@ -320,7 +281,7 @@ const Index = () => {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex min-h-full flex-1 bg-background overflow-x-hidden">
       {/* Hidden file input for schema upload */}
       <input
         ref={fileInputRef}
@@ -347,10 +308,13 @@ const Index = () => {
         sidebarWidth={sidebarWidth}
       />
       
-      {/* Main Content */}
-      <div className="flex flex-1 flex-col transition-all duration-300" style={getMainContentStyles()}>
+      {/* Main Content — min-h-0 lets nested flex children shrink so chat scrolls inside the column */}
+      <div
+        className="flex min-h-full flex-1 flex-col overflow-x-hidden transition-all duration-300"
+        style={getMainContentStyles()}
+      >
         {/* Header */}
-        <header className="border-b border-border">
+        <header className="shrink-0 border-b border-border">
           {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between p-6">
             <div className="flex items-center gap-4">
@@ -366,53 +330,12 @@ const Index = () => {
                   No Database Selected
                 </Badge>
               )}
-              {isAuthenticated ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="p-0 h-auto rounded-full hover:opacity-80 transition-opacity"
-                      title={user?.name || user?.email}
-                      data-testid="user-menu-trigger"
-                    >
-                      <Avatar className="h-10 w-10 border-2 border-purple-500">
-                        <AvatarImage src={user?.picture} alt={user?.name || user?.email} />
-                        <AvatarFallback className="bg-purple-600 text-white font-medium">
-                          {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="bg-card border-border text-foreground" align="end">
-                    <div className="px-3 py-2 border-b border-border" data-testid="user-info-section">
-                      <p className="text-sm font-medium text-foreground" data-testid="user-name-display">{user?.name}</p>
-                      <p className="text-xs text-muted-foreground" data-testid="user-email-display">{user?.email}</p>
-                    </div>
-                    <DropdownMenuItem className="hover:!bg-muted cursor-pointer" onClick={() => setShowTokensModal(true)} data-testid="api-tokens-menu-item">
-                      API Tokens
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-border" />
-                    <DropdownMenuItem className="hover:!bg-muted cursor-pointer" onClick={handleLogout} data-testid="logout-menu-item">
-                      Logout
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button
-                  variant="outline"
-                  className="bg-purple-600 border-purple-500 text-white hover:bg-purple-700"
-                  onClick={() => setShowLoginModal(true)}
-                  data-testid="sign-in-btn"
-                >
-                  Sign In
-                </Button>
-              )}
             </div>
           </div>
 
           {/* Mobile Header */}
           <div className="md:hidden p-4 space-y-3">
-            {/* Row 1: Hamburger (if collapsed) + Logo + User */}
+            {/* Row 1: Hamburger (if collapsed) */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 {sidebarCollapsed && (
@@ -425,49 +348,8 @@ const Index = () => {
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                {isAuthenticated ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="p-0 h-auto rounded-full hover:opacity-80 transition-opacity"
-                      >
-                        <Avatar className="h-8 w-8 border-2 border-purple-500">
-                          <AvatarImage src={user?.picture} alt={user?.name || user?.email} />
-                          <AvatarFallback className="bg-purple-600 text-white font-medium text-xs">
-                            {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-card border-border text-foreground" align="end">
-                      <div className="px-3 py-2 border-b border-border" data-testid="user-info-section">
-                        <p className="text-sm font-medium text-foreground" data-testid="user-name-display">{user?.name}</p>
-                        <p className="text-xs text-muted-foreground" data-testid="user-email-display">{user?.email}</p>
-                      </div>
-                      <DropdownMenuItem className="hover:!bg-muted cursor-pointer" onClick={() => setShowTokensModal(true)} data-testid="api-tokens-menu-item">
-                        API Tokens
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-border" />
-                      <DropdownMenuItem className="hover:!bg-muted cursor-pointer" onClick={handleLogout} data-testid="logout-menu-item">
-                        Logout
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-purple-600 border-purple-500 text-white hover:bg-purple-700"
-                    onClick={() => setShowLoginModal(true)}
-                  >
-                    Sign In
-                  </Button>
-                )}
-              </div>
             </div>
-            
+
             {/* Row 2: Tagline + Database Status */}
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">Graph-Powered Text-to-SQL</p>
@@ -485,7 +367,7 @@ const Index = () => {
         </header>
 
         {/* Sub-header for controls */}
-        <div className="px-6 py-4 border-b border-border">
+        <div className="shrink-0 border-b border-border px-6 py-4">
           <div className="flex gap-3 flex-wrap md:flex-nowrap">
               <Button
                 variant="outline"
@@ -568,10 +450,11 @@ const Index = () => {
           </div>
         </div>
         
-        {/* Chat Interface - Full remaining height */}
-        <div className="flex-1 overflow-hidden flex justify-center">
-          <div className="h-full w-full max-w-7xl md:px-[15px]">
+        {/* Chat — h-full + min-h-0 so grid/flex children get a definite height */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+          <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col overflow-x-hidden md:px-[15px]">
             <ChatInterface
+              className="min-h-0 flex-1"
               disabled={isRefreshingSchema}
               onProcessingChange={setIsChatProcessing}
               useMemory={useMemory}
@@ -582,17 +465,6 @@ const Index = () => {
       </div>
 
       {/* Modals */}
-      <LoginModal 
-        open={showLoginModal} 
-        onOpenChange={(open) => {
-          setShowLoginModal(open);
-          if (!open) {
-            // Remember dismissal for this session to avoid pinning the modal
-            sessionStorage.setItem('loginModalDismissed', '1');
-          }
-        }}
-        canClose={true}
-      />
       <DatabaseModal open={showDatabaseModal} onOpenChange={setShowDatabaseModal} />
       <DeleteDatabaseModal 
         open={showDeleteModal} 
@@ -601,7 +473,6 @@ const Index = () => {
         onConfirm={confirmDeleteGraph}
         isDemo={databaseToDelete?.isDemo || false}
       />
-      <TokensModal open={showTokensModal} onOpenChange={setShowTokensModal} />
     </div>
   );
 };

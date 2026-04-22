@@ -1,12 +1,13 @@
 """Graph-related routes for the text2sql API."""
 
 import logging
-from fastapi import APIRouter, Request, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.core.schema_loader import list_databases
 from api.core.text2sql import (
+    DEFAULT_USER_ID,
     GENERAL_PREFIX,
     ChatRequest,
     ConfirmRequest,
@@ -21,18 +22,12 @@ from api.core.text2sql import (
     _graph_name,
 )
 from api.graph import get_user_rules, set_user_rules
-from api.auth.user_management import token_required
-from api.routes.tokens import UNAUTHORIZED_RESPONSE
 
 graphs_router = APIRouter(tags=["Graphs & Databases"])
 
 
 class GraphData(BaseModel):
-    """Graph data model.
-
-    Args:
-        BaseModel (_type_): _description_
-    """
+    """Graph data model."""
 
     database: str
 
@@ -41,15 +36,10 @@ class GraphData(BaseModel):
     "",
     operation_id="list_databases",
     tags=["mcp_tool"],
-    responses={401: UNAUTHORIZED_RESPONSE}
 )
-@token_required
-async def list_graphs(request: Request):
-    """
-    List all available graphs/databases for the authenticated user.
-    Requires authentication.
-    """
-    graphs = await list_databases(request.state.user_id, GENERAL_PREFIX)
+async def list_graphs():
+    """List all available graphs/databases."""
+    graphs = await list_databases(DEFAULT_USER_ID, GENERAL_PREFIX)
     return JSONResponse(content=graphs)
 
 
@@ -57,21 +47,16 @@ async def list_graphs(request: Request):
     "/{graph_id}/data",
     operation_id="database_schema",
     tags=["mcp_tool"],
-    responses={401: UNAUTHORIZED_RESPONSE}
 )
-@token_required
-async def get_graph_data(
-    request: Request, graph_id: str
-):  # pylint: disable=too-many-locals,too-many-branches
+async def get_graph_data(graph_id: str):  # pylint: disable=too-many-locals,too-many-branches
     """Return all nodes and edges for the specified database schema.
-    Requires authentication.
 
-        args:
-            graph_id (str): The ID of the graph to query (the database name).
+    Args:
+        graph_id (str): The ID of the graph to query (the database name).
     """
 
     try:
-        schema = await get_schema(request.state.user_id, graph_id)
+        schema = await get_schema(DEFAULT_USER_ID, graph_id)
         return JSONResponse(content=schema)
     except GraphNotFoundError as gnfe:
         logging.warning("Graph not found: %s", str(gnfe))
@@ -84,10 +69,9 @@ async def get_graph_data(
         )
 
 
-@graphs_router.post("", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
+@graphs_router.post("")
 async def load_graph(
-    request: Request, data: GraphData = None, file: UploadFile = File(None)
+    data: GraphData = None, file: UploadFile = File(None)
 ):  # pylint: disable=unused-argument
     """
     This route is used to load the graph data into the database.
@@ -97,26 +81,21 @@ async def load_graph(
     - An XML payload (application/xml or text/xml)
     """
 
-    # ✅ Handle JSON Payload
     if data:  # pylint: disable=no-else-raise
         raise HTTPException(status_code=501, detail="JSONLoader is not implemented yet")
-    # ✅ Handle File Upload
     elif file:
         filename = file.filename
 
-        # ✅ Check if file is JSON
         if filename.endswith(".json"):  # pylint: disable=no-else-raise
             raise HTTPException(
                 status_code=501, detail="JSONLoader is not implemented yet"
             )
 
-        # ✅ Check if file is XML
         elif filename.endswith(".xml"):
             raise HTTPException(
                 status_code=501, detail="ODataLoader is not implemented yet"
             )
 
-        # ✅ Check if file is csv
         elif filename.endswith(".csv"):
             raise HTTPException(
                 status_code=501, detail="CSVLoader is not implemented yet"
@@ -131,43 +110,35 @@ async def load_graph(
     "/{graph_id}",
     operation_id="query_database",
     tags=["mcp_tool"],
-    responses={401: UNAUTHORIZED_RESPONSE}
 )
-@token_required
 async def query_graph(
-    request: Request, graph_id: str, chat_data: ChatRequest
+    graph_id: str, chat_data: ChatRequest
 ):  # pylint: disable=too-many-statements
     """
     Query the Database with the given graph_id and chat_data.
-    Requires authentication.
 
-        Args:
-            graph_id (str): The ID of the graph to query.
-            chat_data (ChatRequest): The chat data containing user queries and context.
+    Args:
+        graph_id (str): The ID of the graph to query.
+        chat_data (ChatRequest): The chat data containing user queries and context.
     """
     try:
-        generator = await query_database(request.state.user_id, graph_id, chat_data)
+        generator = await query_database(DEFAULT_USER_ID, graph_id, chat_data)
         return StreamingResponse(generator, media_type="application/json")
     except InvalidArgumentError as iae:
         logging.warning("Invalid argument in query: %s", str(iae))
         return JSONResponse(content={"error": "Invalid query request"}, status_code=400)
 
 
-@graphs_router.post("/{graph_id}/confirm", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
+@graphs_router.post("/{graph_id}/confirm")
 async def confirm_destructive_operation(
-    request: Request,
     graph_id: str,
     confirm_data: ConfirmRequest,
 ):
-    """
-    Handle user confirmation for destructive SQL operations.
-    Requires authentication.
-    """
+    """Handle user confirmation for destructive SQL operations."""
 
     try:
         generator = await execute_destructive_operation(
-            request.state.user_id, graph_id, confirm_data
+            DEFAULT_USER_ID, graph_id, confirm_data
         )
         return StreamingResponse(generator, media_type="application/json")
     except InvalidArgumentError as iae:
@@ -175,20 +146,16 @@ async def confirm_destructive_operation(
         return JSONResponse(content={"error": "Invalid confirmation request"}, status_code=400)
 
 
-@graphs_router.post("/{graph_id}/refresh", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
-async def refresh_graph_schema(request: Request, graph_id: str):
+@graphs_router.post("/{graph_id}/refresh")
+async def refresh_graph_schema(graph_id: str):
     """
     Manually refresh the graph schema from the database.
-    This endpoint allows users to manually trigger a schema refresh
-    if they suspect the graph is out of sync with the database.
     Streams progress steps as a sequence of JSON messages.
     """
     try:
-        generator = await refresh_database_schema(request.state.user_id, graph_id)
+        generator = await refresh_database_schema(DEFAULT_USER_ID, graph_id)
         return StreamingResponse(generator, media_type="application/json")
     except (InternalError, InvalidArgumentError) as e:
-        # Log detailed error internally, send generic message to user
         if isinstance(e, InternalError):
             logging.error("Internal error refreshing schema: %s", str(e))
             error_message = "Failed to refresh database schema"
@@ -200,19 +167,12 @@ async def refresh_graph_schema(request: Request, graph_id: str):
         return JSONResponse(content={"error": error_message}, status_code=status_code)
 
 
-@graphs_router.delete("/{graph_id}", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
-async def delete_graph(request: Request, graph_id: str):
-    """Delete the specified graph (namespaced to the user).
-
-    This will attempt to delete the FalkorDB graph belonging to the
-    authenticated user. The graph id used by the client is stripped of
-    namespace and will be namespaced using the user's id from the request
-    state.
-    """
+@graphs_router.delete("/{graph_id}")
+async def delete_graph(graph_id: str):
+    """Delete the specified graph."""
 
     try:
-        result = await delete_database(request.state.user_id, graph_id)
+        result = await delete_database(DEFAULT_USER_ID, graph_id)
         return JSONResponse(content=result)
 
     except InvalidArgumentError as iae:
@@ -234,12 +194,11 @@ class UserRulesRequest(BaseModel):
     user_rules: str
 
 
-@graphs_router.get("/{graph_id}/user-rules", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
-async def get_graph_user_rules(request: Request, graph_id: str):
+@graphs_router.get("/{graph_id}/user-rules")
+async def get_graph_user_rules(graph_id: str):
     """Get user rules for the specified graph."""
     try:
-        full_graph_id = _graph_name(request.state.user_id, graph_id)
+        full_graph_id = _graph_name(DEFAULT_USER_ID, graph_id)
         user_rules = await get_user_rules(full_graph_id)
         logging.info("Retrieved user rules length: %d", len(user_rules) if user_rules else 0)
         return JSONResponse(content={"user_rules": user_rules})
@@ -250,12 +209,10 @@ async def get_graph_user_rules(request: Request, graph_id: str):
         return JSONResponse(content={"error": "Failed to get user rules"}, status_code=500)
 
 
-@graphs_router.put("/{graph_id}/user-rules", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
-async def update_graph_user_rules(request: Request, graph_id: str, data: UserRulesRequest):
+@graphs_router.put("/{graph_id}/user-rules")
+async def update_graph_user_rules(graph_id: str, data: UserRulesRequest):
     """Update user rules for the specified graph."""
     try:
-        # Prevent modifying rules for demo databases
         if GENERAL_PREFIX and graph_id.startswith(GENERAL_PREFIX):
             return JSONResponse(
                 content={"error": "Rules cannot be modified for demo databases"},
@@ -265,7 +222,7 @@ async def update_graph_user_rules(request: Request, graph_id: str, data: UserRul
         logging.info(
             "Received request to update user rules, content length: %d", len(data.user_rules)
         )
-        full_graph_id = _graph_name(request.state.user_id, graph_id)
+        full_graph_id = _graph_name(DEFAULT_USER_ID, graph_id)
         await set_user_rules(full_graph_id, data.user_rules)
         logging.info("User rules updated successfully")
         return JSONResponse(content={"success": True, "user_rules": data.user_rules})

@@ -4,7 +4,7 @@ import re
 import datetime
 import decimal
 import logging
-from typing import AsyncGenerator, Dict, Any, List, Tuple
+from typing import AsyncGenerator, Dict, Any, List, Tuple, Optional
 from urllib.parse import urlparse, parse_qs, unquote
 
 import psycopg2
@@ -12,7 +12,9 @@ from psycopg2 import sql
 import tqdm
 
 from api.loaders.base_loader import BaseLoader  # pylint: disable=import-error
-from api.loaders.graph_loader import load_to_graph  # pylint: disable=import-error
+from api.loaders.graph_loader import load_to_graph  
+
+from pprint import pprint
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -53,25 +55,54 @@ class PostgresLoader(BaseLoader):
 
     @staticmethod
     def _execute_sample_query(
-        cursor: Any, table_name: str, col_name: str, sample_size: int = 3
+        cursor: Any,
+        table_name: str,
+        col_name: str,
+        sample_size: int = 3,
+        *,
+        data_type: Optional[str] = None,
     ) -> List[Any]:
         """
         Execute query to get random sample values for a column.
         PostgreSQL implementation using ORDER BY RANDOM() for random sampling.
+
+        For type ``json`` (not ``jsonb``), ``DISTINCT`` on the raw value is invalid
+        because ``json`` has no equality operator. We dedupe using ``::text`` instead
+        (lexical string form; acceptable for sampling only).
         """
-        query = sql.SQL("""
-            SELECT {col}
-            FROM (
-                SELECT DISTINCT {col}
-                FROM {table}
-                WHERE {col} IS NOT NULL
-            ) AS distinct_vals
-            ORDER BY RANDOM()
-            LIMIT %s;
-        """).format(
-            col=sql.Identifier(col_name),
-            table=sql.Identifier(table_name)
-        )
+        col_ident = sql.Identifier(col_name)
+        table_ident = sql.Identifier(table_name)
+
+        if data_type and data_type.lower() == "json":
+            distinct_expr = sql.SQL("{}::text AS col_text").format(col_ident)
+            query = sql.SQL("""
+                SELECT col_text
+                FROM (
+                    SELECT DISTINCT {distinct_expr}
+                    FROM {table}
+                    WHERE {col} IS NOT NULL
+                ) AS distinct_vals
+                ORDER BY RANDOM()
+                LIMIT %s;
+            """).format(
+                distinct_expr=distinct_expr,
+                col=col_ident,
+                table=table_ident,
+            )
+        else:
+            query = sql.SQL("""
+                SELECT {col}
+                FROM (
+                    SELECT DISTINCT {col}
+                    FROM {table}
+                    WHERE {col} IS NOT NULL
+                ) AS distinct_vals
+                ORDER BY RANDOM()
+                LIMIT %s;
+            """).format(
+                col=col_ident,
+                table=table_ident,
+            )
         cursor.execute(query, (sample_size,))
         sample_results = cursor.fetchall()
         return [row[0] for row in sample_results if row[0] is not None]
@@ -113,9 +144,11 @@ class PostgresLoader(BaseLoader):
         """
         try:
             parsed = urlparse(connection_url)
+
             query_params = parse_qs(parsed.query)
 
             options = query_params.get('options', [])
+         
             if not options:
                 return 'public'
 
@@ -171,6 +204,7 @@ class PostgresLoader(BaseLoader):
 
             # Extract database name from connection URL
             db_name = connection_url.split('/')[-1]
+            print('PostgresLoader.load: db_name', db_name)
             if '?' in db_name:
                 db_name = db_name.split('?')[0]
 
@@ -240,6 +274,8 @@ class PostgresLoader(BaseLoader):
         """, (schema, schema))
 
         tables = cursor.fetchall()
+        print('PostgresLoader.extract_tables_info: tables')
+        pprint(tables, width=120, compact=False)
 
         for table_name, table_comment in tqdm.tqdm(tables, desc="Extracting table information"):
             table_name = table_name.strip()
@@ -262,7 +298,8 @@ class PostgresLoader(BaseLoader):
                 'foreign_keys': foreign_keys,
                 'col_descriptions': col_descriptions
             }
-
+        # print('PostgresLoader.extract_tables_info: entities')
+        # pprint(entities, width=120, compact=False)
         return entities
 
     @staticmethod
@@ -344,7 +381,7 @@ class PostgresLoader(BaseLoader):
 
             # Extract sample values for the column (stored separately, not in description)
             sample_values = PostgresLoader.extract_sample_values_for_column(
-                cursor, table_name, col_name
+                cursor, table_name, col_name, data_type=data_type
             )
 
             columns_info[col_name] = {
@@ -355,7 +392,8 @@ class PostgresLoader(BaseLoader):
                 'default': column_default,
                 'sample_values': sample_values
             }
-
+        print('PostgresLoader.extract_columns_info: table_name', table_name)
+        pprint(columns_info, width=120, compact=False)
 
         return columns_info
 

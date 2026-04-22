@@ -100,7 +100,7 @@ class SQLIdentifierQuoter:
                 if not ((table_name.startswith('"') and table_name.endswith('"')) or
                        (table_name.startswith('`') and table_name.endswith('`'))):
                     table_names.add(table_name)
-
+        print('SQL utils: table_names', table_names)
         return table_names
 
     @classmethod

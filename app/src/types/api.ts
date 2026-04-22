@@ -1,20 +1,5 @@
 // API Types and Interfaces
 
-// User types
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-  picture?: string;
-  provider?: 'google' | 'github';
-}
-
-// Authentication types
-export interface AuthStatus {
-  authenticated: boolean;
-  user?: User;
-}
-
 // Graph/Database types
 export interface Graph {
   id: string;
@@ -71,6 +56,24 @@ export interface StreamMessage {
   content?: string;
   message?: string;    // Some backend messages use 'message' instead of 'content'
   data?: any;
+  visualization?: {
+    csv_data: string;
+    schema_info: {
+      columns: string[];
+      numeric_columns: string[];
+      categorical_columns: string[];
+      datetime_columns: string[];
+      row_count: number;
+      unique_counts?: Record<string, number>;
+      error?: string;
+    };
+    visualization_dsl: {
+      chart_type: string;
+      data_columns: string[];
+      config: Record<string, any>;
+      layout: Record<string, any>;
+    };
+  };
   step?: string;
   require_confirmation?: boolean;
   confirmation_id?: string;

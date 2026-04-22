@@ -1,13 +1,10 @@
 """Settings and configuration routes for the text2sql API."""
 
 import logging
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from litellm import completion
-
-from api.auth.user_management import token_required
-from api.routes.tokens import UNAUTHORIZED_RESPONSE
 
 settings_router = APIRouter(tags=["Settings"])
 
@@ -24,9 +21,8 @@ class ValidateKeyRequest(BaseModel):
     model: str = "gpt-3.5-turbo"
 
 
-@settings_router.post("/validate-api-key", responses={401: UNAUTHORIZED_RESPONSE})
-@token_required
-async def validate_api_key(request: Request, data: ValidateKeyRequest):  # pylint: disable=too-many-return-statements,unused-argument
+@settings_router.post("/validate-api-key")
+async def validate_api_key(data: ValidateKeyRequest):  # pylint: disable=too-many-return-statements
     """
     Validate an AI provider API key by making a simple test request.
     This endpoint does not store the key, it only validates it.

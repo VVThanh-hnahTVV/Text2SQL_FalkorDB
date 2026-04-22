@@ -6,6 +6,8 @@ This module contains the configuration for the text2sql module.
 import os
 import logging
 import dataclasses
+
+_config_log = logging.getLogger(__name__)
 from typing import Union
 from litellm import embedding
 
@@ -82,7 +84,7 @@ class Config:
         COMPLETION_MODEL = _user_completion or _with_prefix(
             os.getenv("OLLAMA_MODEL"), "ollama")
         EMBEDDING_MODEL_NAME = _user_embedding or _with_prefix(
-            os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text-v2-moe:latest"), "ollama")
+            os.getenv("OLLAMA_EMBEDDING_MODEL", "jeffh/intfloat-e5-base-v2:f32 "), "ollama")
     elif os.getenv("GROQ_API_KEY"):
         LLM_PROVIDER = "openai"
         AZURE_FLAG = False
@@ -94,7 +96,8 @@ class Config:
         LLM_PROVIDER = "openai"
         AZURE_FLAG = False
         COMPLETION_MODEL = _user_completion or "openai/gpt-4.1-nano"
-        EMBEDDING_MODEL_NAME = _user_embedding or "openai/text-embedding-3-small"
+        EMBEDDING_MODEL_NAME = _user_embedding or _with_prefix(
+            os.getenv("OLLAMA_EMBEDDING_MODEL", "jeffh/intfloat-e5-base-v2:f32 "), "ollama")
     elif os.getenv("GEMINI_API_KEY"):
         LLM_PROVIDER = "gemini"
         AZURE_FLAG = False
@@ -128,7 +131,13 @@ class Config:
         EMBEDDING_MODEL_NAME = _user_embedding or "azure/text-embedding-ada-002"
 
     # Temporary debug (runs at import time). Avoid adding secrets here.
-    print(f"[Config] {COMPLETION_MODEL=} {EMBEDDING_MODEL_NAME=}")
+    _config_log.info(
+        "[Config] COMPLETION_MODEL=%s EMBEDDING_MODEL_NAME=%s",
+        COMPLETION_MODEL,
+        EMBEDDING_MODEL_NAME,
+    )
+    print("**********COMPLETION_MODEL**********", COMPLETION_MODEL)
+    print("**********EMBEDDING_MODEL_NAME**********", EMBEDDING_MODEL_NAME)
 
     DB_MAX_DISTINCT: int = 100  # pylint: disable=invalid-name
     DB_UNIQUENESS_THRESHOLD: float = 0.5  # pylint: disable=invalid-name

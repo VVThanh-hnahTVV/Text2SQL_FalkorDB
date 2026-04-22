@@ -149,6 +149,22 @@ class TestPostgreSQLLoader(unittest.TestCase):
         self.assertEqual(user_rel["source_column"], "user_id")
         self.assertEqual(user_rel["target_column"], "id")
 
+    def test_execute_sample_query_json_uses_text_distinct(self):
+        """json columns cannot use DISTINCT on raw value; sampling uses ::text."""
+        mock_cursor = Mock()
+        mock_cursor.fetchall.return_value = [('{"a": 1}',)]
+
+        PostgresLoader._execute_sample_query(
+            mock_cursor, "t1", "jcol", sample_size=3, data_type="json"
+        )
+
+        mock_cursor.execute.assert_called_once()
+        composed, params = mock_cursor.execute.call_args[0]
+        self.assertEqual(params, (3,))
+        sql_repr = repr(composed)
+        self.assertIn("::text", sql_repr)
+        self.assertIn("DISTINCT", sql_repr)
+
 
 class TestParseSchemaFromUrl(unittest.TestCase):
     """Test cases for parse_schema_from_url helper method"""

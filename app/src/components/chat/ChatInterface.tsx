@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { useDatabase } from "@/contexts/DatabaseContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useChat } from "@/contexts/ChatContext";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -23,6 +22,24 @@ interface ChatMessageData {
     text: string;
   }>;
   queryData?: any[]; // For table data
+  visualizationData?: {
+    csv_data: string;
+    schema_info: {
+      columns: string[];
+      numeric_columns: string[];
+      categorical_columns: string[];
+      datetime_columns: string[];
+      row_count: number;
+      unique_counts?: Record<string, number>;
+      error?: string;
+    };
+    visualization_dsl: {
+      chart_type: string;
+      data_columns: string[];
+      config: Record<string, any>;
+      layout: Record<string, any>;
+    };
+  };
   analysisInfo?: {
     confidence?: number;
     missing?: string;
@@ -61,9 +78,11 @@ const ChatInterface = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom function
+  // Scroll the chat pane only (scrollIntoView can target the wrong ancestor when Plotly/layout inflates).
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = chatContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
   // Loading message component using skeleton
@@ -81,8 +100,6 @@ const ChatInterface = ({
       </div>
     </div>
   );
-
-  const { user } = useAuth();
 
   const suggestions = [
     "Show me five customers",
@@ -143,6 +160,7 @@ const ChatInterface = ({
       let finalContent = "";
       let sqlQuery = "";
       let queryResults: any[] | null = null;
+      let visualizationData: ChatMessageData["visualizationData"] | undefined;
       let analysisInfo: {
         confidence?: number;
         missing?: string;
@@ -192,6 +210,7 @@ const ChatInterface = ({
         } else if (message.type === 'query_result') {
           // Store query results to display as table - backend sends it in 'data' field
           queryResults = message.data || [];
+          visualizationData = message.visualization;
         } else if (message.type === 'ai_response') {
           // AI-generated response - this is what we show to the user
           const responseContent = (message.message || message.content || '').trim();
@@ -253,6 +272,7 @@ const ChatInterface = ({
           type: "query-result",
           content: "Query Results",
           queryData: queryResults,
+          visualizationData,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, resultsMessage]);
@@ -328,6 +348,7 @@ const ChatInterface = ({
     try {
       let finalContent = "";
       let queryResults: any[] | null = null;
+      let visualizationData: ChatMessageData["visualizationData"] | undefined;
 
       // Build confirm request with custom credentials if available
       const confirmRequest: ConfirmRequest = {
@@ -364,6 +385,7 @@ const ChatInterface = ({
         } else if (message.type === 'query_result') {
           // Store query results
           queryResults = message.data || [];
+          visualizationData = message.visualization;
         } else if (message.type === 'ai_response') {
           // AI-generated response
           const responseContent = (message.message || message.content || '').trim();
@@ -425,6 +447,7 @@ const ChatInterface = ({
           type: "query-result",
           content: "Query Results",
           queryData: queryResults,
+          visualizationData,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, resultsMessage]);
@@ -494,10 +517,20 @@ const ChatInterface = ({
   };
 
   return (
-    <div className={cn("flex flex-col h-full bg-background", className)} data-testid="chat-interface">
-      {/* Messages Area */}
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto scrollbar-hide overflow-x-hidden" data-testid="chat-messages-container">
-        <div className="space-y-6 py-6 max-w-full">
+    <div
+      className={cn(
+        "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-x-hidden overflow-y-visible bg-background",
+        className,
+      )}
+      data-testid="chat-interface"
+    >
+      {/* Grid row 1: minmax(0,1fr) avoids flex min-content blow-up (Plotly / wide content) */}
+      <div
+        ref={chatContainerRef}
+        className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain scrollbar-visible"
+        data-testid="chat-messages-container"
+      >
+        <div className="max-w-full space-y-6 overflow-x-hidden py-6">
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
@@ -505,9 +538,9 @@ const ChatInterface = ({
               content={msg.content}
               steps={msg.steps}
               queryData={msg.queryData}
+              visualizationData={msg.visualizationData}
               analysisInfo={msg.analysisInfo}
               confirmationData={msg.confirmationData}
-              user={user}
               onConfirm={msg.type === 'confirmation' ? () => handleConfirmDestructive(msg.id) : undefined}
               onCancel={msg.type === 'confirmation' ? () => handleCancelDestructive(msg.id) : undefined}
             />
@@ -519,8 +552,8 @@ const ChatInterface = ({
         </div>
       </div>
 
-      {/* Bottom Section with Suggestions and Input */}
-      <div className="border-t border-border bg-background">
+      {/* Bottom Section with Suggestions and Input (grid row 2) */}
+      <div className="min-h-0 border-t border-border bg-background">
         <div className="p-6">
           {/* Suggestion Cards - Only show for DEMO_CRM database */}
           {(selectedGraph?.id === 'DEMO_CRM' || selectedGraph?.name === 'DEMO_CRM') && (

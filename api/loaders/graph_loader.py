@@ -1,12 +1,16 @@
 """Graph loader module for loading data into graph databases."""
 
 import json
+import logging
 
 import tqdm
+
+logger = logging.getLogger(__name__)
 
 from api.config import Config
 from api.extensions import db
 from api.utils import generate_db_description, create_combined_description
+from pprint import pprint
 
 
 async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
@@ -33,6 +37,10 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
 
     create_combined_description(entities)
 
+    # print("Graph Loader: entities", entities)
+    # print("Graph Loader: ent", list(entities.keys()))
+    # print("Graph Loader: relationships", list(relationships))
+
     try:
         # Create vector indices
         await graph.query(
@@ -52,9 +60,15 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
         )
         await graph.query("CREATE INDEX FOR (p:Table) ON (p.name)")
     except Exception as e:  # pylint: disable=broad-exception-caught
-        print(f"Error creating vector indices: {str(e)}")
+        logger.warning("Error creating vector indices: %s", e)
 
+    print("Relationships", relationships)
+    print("Starting to create database node description")
     db_des = generate_db_description(db_name=db_name, table_names=list(entities.keys()))
+    # db_des = "This is a test database"
+    print("**********DB Description**********")
+    pprint(db_des, width=120, compact=False)
+    print("**********DB Description**********")
     await graph.query(
         """
         CREATE (d:Database {
@@ -65,8 +79,12 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
         """,
         {"db_name": db_name, "description": db_des, "url": db_url},
     )
-
+    # print("**********Entities**********")
+    # pprint(entities, width=120, compact=False)
     for table_name, table_info in tqdm.tqdm(entities.items(), desc="Creating Graph Table Nodes"):
+        # print(table_name)
+        # print("**********Table info**********")
+        # pprint(table_info, width=120, compact=False)
         table_desc = table_info["description"]
         embedding_result = embedding_model.embed(table_desc)
         fk = json.dumps(table_info.get("foreign_keys", []))
@@ -94,6 +112,9 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
         # (without 2 sources of truth)
         batch_flag = True
         col_descriptions = table_info.get("col_descriptions")
+        # print(table_name)
+        # print("**********Column descriptions**********")
+        # pprint(col_descriptions, width=120, compact=False)
         if col_descriptions is None:
             batch_flag = False
         else:
@@ -106,11 +127,10 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
                     ],
                     desc=f"Creating embeddings for {table_name} columns",
                 ):
-
                     embedding_result = embedding_model.embed(batch)
                     embed_columns.extend(embedding_result)
             except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Error creating embeddings: {str(e)}")
+                logger.warning("Error creating embeddings: %s", e)
                 batch_flag = False
 
         # Create column nodes
@@ -189,5 +209,5 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
                     },
                 )
             except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Warning: Could not create relationship: {str(e)}")
+                logger.warning("Could not create relationship: %s", e)
                 continue

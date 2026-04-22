@@ -4,7 +4,7 @@ import datetime
 import decimal
 import logging
 import re
-from typing import AsyncGenerator, Dict, Any, List, Tuple
+from typing import AsyncGenerator, Dict, Any, List, Tuple, Optional
 
 import tqdm
 import pymysql
@@ -55,12 +55,18 @@ class MySQLLoader(BaseLoader):
 
     @staticmethod
     def _execute_sample_query(
-        cursor, table_name: str, col_name: str, sample_size: int = 3
+        cursor,
+        table_name: str,
+        col_name: str,
+        sample_size: int = 3,
+        *,
+        data_type: Optional[str] = None,
     ) -> List[Any]:
         """
         Execute query to get random sample values for a column.
         MySQL implementation using ORDER BY RAND() for random sampling.
         """
+        _ = data_type  # unused; PostgreSQL uses this for json DISTINCT
         query = f"""
             SELECT DISTINCT `{col_name}`
             FROM `{table_name}`

@@ -236,8 +236,15 @@ class MySQLLoader(BaseLoader):
             table_name = table_info['TABLE_NAME']
             table_comment = table_info['TABLE_COMMENT']
 
+            # Get total row count once per table to control sample size policy.
+            cursor.execute(f"SELECT COUNT(*) AS cnt FROM `{table_name}`")
+            row_count_result = cursor.fetchone() or {}
+            row_count = row_count_result.get("cnt", 0)
+
             # Get column information for this table
-            columns_info = MySQLLoader.extract_columns_info(cursor, db_name, table_name)
+            columns_info = MySQLLoader.extract_columns_info(
+                cursor, db_name, table_name, row_count=row_count
+            )
 
             # Get foreign keys for this table
             foreign_keys = MySQLLoader.extract_foreign_keys(cursor, db_name, table_name)
@@ -252,13 +259,19 @@ class MySQLLoader(BaseLoader):
                 'description': table_description,
                 'columns': columns_info,
                 'foreign_keys': foreign_keys,
-                'col_descriptions': col_descriptions
+                'col_descriptions': col_descriptions,
+                'row_count': row_count
             }
 
         return entities
 
     @staticmethod
-    def extract_columns_info(cursor, db_name: str, table_name: str) -> Dict[str, Any]:
+    def extract_columns_info(
+        cursor,
+        db_name: str,
+        table_name: str,
+        row_count: int = 0
+    ) -> Dict[str, Any]:
         """
         Extract column information for a specific table.
 
@@ -321,9 +334,12 @@ class MySQLLoader(BaseLoader):
             if column_default is not None:
                 description_parts.append(f"(Default: {column_default})")
 
+            # For small lookup/list tables, keep all values; otherwise sample 3 values.
+            sample_size = 3 if row_count > 20 else max(row_count, 0)
+
             # Extract sample values for the column (stored separately, not in description)
             sample_values = MySQLLoader.extract_sample_values_for_column(
-                cursor, table_name, col_name
+                cursor, table_name, col_name, sample_size=sample_size
             )
 
             columns_info[col_name] = {

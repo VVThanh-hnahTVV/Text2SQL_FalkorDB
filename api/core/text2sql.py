@@ -111,17 +111,6 @@ def get_database_type_and_loader(db_url: str):
     Returns:
         tuple: (database_type, loader_class)
     """
-    if not db_url or db_url == "No URL available for this database.":
-        return None, None
-
-    db_url_lower = db_url.lower()
-
-    if db_url_lower.startswith('postgresql://') or db_url_lower.startswith('postgres://'):
-        return 'postgresql', PostgresLoader
-    if db_url_lower.startswith('mysql://'):
-        return 'mysql', MySQLLoader
-
-    # Default to PostgresLoader for backward compatibility
     return 'postgresql', PostgresLoader
 
 def sanitize_query(query: str) -> str:
@@ -243,7 +232,8 @@ async def get_schema(user_id: str, graph_id: str):  # pylint: disable=too-many-l
             continue
         seen.add(key)
         links.append({"source": source, "target": target})
-
+    # print("***************** get_schema: nodes", nodes)
+    # print("***************** get_schema: links", links)
     return {"nodes": nodes, "links": links}
 
 async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  # pylint: disable=too-many-statements
@@ -255,7 +245,9 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
             chat_data (ChatRequest): The chat data containing user queries and context.
     """
     graph_id = _graph_name(user_id, graph_id)
-
+    print("***************** query_database: graph_id", graph_id)
+    print("***************** query_database: chat_data", chat_data)
+    print("***************** query_database: user_id", user_id)
     queries_history = chat_data.chat if hasattr(chat_data, 'chat') else None
     result_history = chat_data.result if hasattr(chat_data, 'result') else None
     instructions = chat_data.instructions if hasattr(chat_data, 'instructions') else None

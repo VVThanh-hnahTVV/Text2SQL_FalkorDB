@@ -65,6 +65,33 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
     print("Relationships", relationships)
     print("Starting to create database node description")
     db_des = generate_db_description(db_name=db_name, table_names=list(entities.keys()))
+    # Explicitly append lookup/list tables so the LLM always sees these small-domain enums.
+    lookup_tables = [
+        table_name
+        for table_name, table_info in entities.items()
+        if int(table_info.get("row_count", 0)) <= 20
+    ]
+    if lookup_tables:
+        lookup_lines = []
+        for table_name in sorted(lookup_tables):
+            table_info = entities.get(table_name, {})
+            columns = table_info.get("columns", {})
+            column_samples = []
+            for col_name, col_info in columns.items():
+                sample_values = col_info.get("sample_values", [])
+                if sample_values:
+                    column_samples.append(
+                        f"{col_name}=[{', '.join(sample_values)}]"
+                    )
+            if column_samples:
+                lookup_lines.append(f"- {table_name}: " + "; ".join(column_samples))
+            else:
+                lookup_lines.append(f"- {table_name}: (no sample values)")
+
+        db_des += (
+            "\n\nLookup/list tables (row_count <= 20) with sample values:\n"
+            + "\n".join(lookup_lines)
+        )
     # db_des = "This is a test database"
     print("**********DB Description**********")
     pprint(db_des, width=120, compact=False)

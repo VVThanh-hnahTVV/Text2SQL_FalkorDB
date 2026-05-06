@@ -1,0 +1,39 @@
+                                             Table "public.shops"
+       Column        |            Type             | Collation | Nullable |              Default              
+---------------------+-----------------------------+-----------+----------+-----------------------------------
+ id                  | integer                     |           | not null | nextval('shops_id_seq'::regclass)
+ user_id             | integer                     |           | not null | 
+ shop_id             | character varying(191)      |           |          | 
+ myshopify_domain    | character varying(255)      |           | not null | 
+ domain              | character varying(255)      |           |          | 
+ name                | text                        |           |          | 
+ email               | character varying(255)      |           |          | 
+ shop_owner          | character varying(255)      |           |          | 
+ phone               | character varying(255)      |           |          | 
+ customer_email      | character varying(255)      |           |          | 
+ address1            | character varying(255)      |           |          | 
+ address2            | character varying(255)      |           |          | 
+ city                | character varying(255)      |           |          | 
+ province            | character varying(255)      |           |          | 
+ province_code       | character varying(255)      |           |          | 
+ zip                 | character varying(255)      |           |          | 
+ country             | character varying(255)      |           |          | 
+ country_code        | character varying(255)      |           |          | 
+ country_name        | character varying(255)      |           |          | 
+ currency            | character varying(255)      |           |          | 
+ plan_name           | character varying(255)      |           |          | 
+ plan_display_name   | character varying(255)      |           |          | 
+ plan_updated_at     | timestamp without time zone |           |          | 
+ partner_development | boolean                     |           |          | 
+ shopify_plus        | boolean                     |           |          | 
+ created_at          | timestamp without time zone |           |          | 
+ updated_at          | timestamp without time zone |           |          | 
+ deleted_at          | timestamp without time zone |           |          | 
+Indexes:
+    "shops_pkey" PRIMARY KEY, btree (id)
+    "shops_myshopify_domain_key" UNIQUE CONSTRAINT, btree (myshopify_domain)
+Foreign-key constraints:
+    "fk_shops_user" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "instances" CONSTRAINT "fk_instances_shop" FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE SET NULL
+

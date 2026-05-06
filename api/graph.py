@@ -5,6 +5,7 @@ import json
 import logging
 from itertools import combinations
 from typing import Any, Dict, List
+from pprint import pprint
 
 from litellm import completion
 from pydantic import BaseModel
@@ -120,7 +121,7 @@ async def _find_tables(
         List of matching table information.
     """
     query = """
-        CALL db.idx.vector.queryNodes('Table','embedding',3,vecf32($embedding))
+        CALL db.idx.vector.queryNodes('Table','embedding',1,vecf32($embedding))
         YIELD node, score
         MATCH (node)-[:BELONGS_TO]-(columns)
         RETURN node.name, node.description, node.foreign_keys, collect({
@@ -138,6 +139,8 @@ async def _find_tables(
     ]
 
     results = await asyncio.gather(*tasks)
+    print("***************** _find_tables: results")
+    pprint(results, width=120, compact=False)
     return [row for rows in results for row in rows]
 
 
@@ -156,7 +159,7 @@ async def _find_tables_by_columns(
         List of matching table information.
     """
     query = """
-        CALL db.idx.vector.queryNodes('Column','embedding',3,vecf32($embedding))
+        CALL db.idx.vector.queryNodes('Column','embedding',2,vecf32($embedding))
         YIELD node, score
         MATCH (node)-[:BELONGS_TO]-(table)-[:BELONGS_TO]-(columns)
         RETURN
@@ -178,6 +181,8 @@ async def _find_tables_by_columns(
     ]
 
     results = await asyncio.gather(*tasks)
+    print("***************** _find_tables_by_columns: results")
+    pprint(results, width=120, compact=False)
     return [row for rows in results for row in rows]
 
 
@@ -271,7 +276,7 @@ async def _find_connecting_tables(
     RETURN target_table.name, target_table.description, target_table.foreign_keys, columns
     """
     try:
-        result = await _query_graph(graph, query, {"pairs": pairs}, timeout=99999999)
+        result = await _query_graph(graph, query, {"pairs": pairs}, timeout=5000)
     except Exception as e:
         logging.error("Error finding connecting tables: %s", e)
         result = []
@@ -298,9 +303,31 @@ async def find( # pylint: disable=too-many-locals
     graph = db.select_graph(graph_id)
     user_query = queries_history[-1]
     previous_queries = queries_history[:-1]
-
+    print("***************** find: previous_queries", previous_queries)
+    print("***************** find: user_query", user_query)
+    print("***************** find: db_description", db_description)
     logging.info("Calling LLM to find relevant tables/columns for query")
 
+    system_prompt = Config.FIND_SYSTEM_PROMPT.format(
+        db_description=db_description
+    )
+    user_prompt = json.dumps({
+        "previous_user_queries": previous_queries,
+        "user_query": user_query
+    })
+
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        },
+        {
+            "role": "user",
+            "content": user_prompt
+        },
+    ]
+    print("***************** find: messages")
+    pprint(messages, width=120, compact=False)
     completion_result = completion(
         model=Config.COMPLETION_MODEL,
         response_format=Descriptions,
@@ -321,11 +348,16 @@ async def find( # pylint: disable=too-many-locals
         ],
         temperature=0,
     )
-
+    print("***************** find: completion_result")
+    pprint(completion_result, width=120, compact=False)
     json_data = json.loads(completion_result.choices[0].message.content)
+    print("***************** find: json_data")
+    pprint(json_data, width=120, compact=False)
     descriptions = Descriptions(**json_data)
     descriptions_text = ([desc.description for desc in descriptions.tables_descriptions] +
                          [desc.description for desc in descriptions.columns_descriptions])
+    print("***************** find: descriptions_text")
+    pprint(descriptions_text, width=120, compact=False)
     if not descriptions_text:
         return []
 
@@ -365,6 +397,14 @@ async def find( # pylint: disable=too-many-locals
     combined_tables = _get_unique_tables(
         tables_des + tables_by_columns_des + tables_by_route + tables_by_sphere
     )
+    # max_tables = max(1, Config.MAX_TABLES_FOR_ANALYSIS)
+    # if len(combined_tables) > max_tables:
+    #     logging.info(
+    #         "Limiting combined tables from %s to %s for analysis",
+    #         len(combined_tables),
+    #         max_tables,
+    #     )
+    #     combined_tables = combined_tables[:max_tables]
 
     return combined_tables
 

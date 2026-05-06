@@ -261,6 +261,9 @@ class MemoryTool:
             conv_text += f"Error: {conversation['error']}\n"
         if conversation.get('answer'):
             conv_text += f"Assistant: {conversation['answer']}\n"
+
+        print("***************** update_user_information: conv_text", conv_text)
+        print("***************** update_user_information: summary", summary)
         prompt = f"""
                 You are updating the personal memory of user.
                 ### Inputs

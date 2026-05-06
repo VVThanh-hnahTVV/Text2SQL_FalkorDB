@@ -84,7 +84,7 @@ class Config:
         COMPLETION_MODEL = _user_completion or _with_prefix(
             os.getenv("OLLAMA_MODEL"), "ollama")
         EMBEDDING_MODEL_NAME = _user_embedding or _with_prefix(
-            os.getenv("OLLAMA_EMBEDDING_MODEL", "jeffh/intfloat-e5-base-v2:f32 "), "ollama")
+            os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text-v2-moe:latest"), "ollama")
     elif os.getenv("GROQ_API_KEY"):
         LLM_PROVIDER = "openai"
         AZURE_FLAG = False
@@ -142,19 +142,19 @@ class Config:
     DB_MAX_DISTINCT: int = 100  # pylint: disable=invalid-name
     DB_UNIQUENESS_THRESHOLD: float = 0.5  # pylint: disable=invalid-name
     SHORT_MEMORY_LENGTH = 5  # Maximum number of questions to keep in short-term memory
+    MAX_TABLES_FOR_ANALYSIS: int = int(os.getenv("MAX_TABLES_FOR_ANALYSIS", "5"))
 
     EMBEDDING_MODEL = EmbeddingsModel(model_name=EMBEDDING_MODEL_NAME)
 
     FIND_SYSTEM_PROMPT = """
-    You are an expert in analyzing natural language queries into SQL tables descriptions.
-    Please analyze the user's query and generate a set of tables and columns descriptions that might be relevant to the user's query.
-    These descriptions should describe the tables and columns that are relevant to the user's query.
-    If the user's query is more relevant to specific columns, please provide a description of those columns.
-    - Try to generate description for any part of the user query.
-    - Create generic table or column description, do not use specific codes, values or any specific condition.
-    - Try to be accurate and precise in your descriptions.
-    - In any case do not generate more than five descriptions (each).
-    - List the tables and columns in the order of their relevance to the user's query.
+    You are an expert in analyzing natural language queries into SQL table/column descriptions.
+    Please analyze the user's query and generate descriptions that are most relevant to the query.
+    Return exactly one table description and exactly one column description.
+    - The output must contain exactly 1 item in tables_descriptions.
+    - The output must contain exactly 1 item in columns_descriptions.
+    - Do not generate duplicate descriptions.
+    - Create generic descriptions; do not use specific codes, values, or conditions.
+    - Keep descriptions accurate and concise.
 
     Keep in mind that the database that you work with has the following DB description: {db_description}.
 
@@ -170,10 +170,10 @@ class Config:
 
     **Output:**
     * **Table Descriptions:**
-    You should provide a set of table descriptions that are relevant to the user's query.
+    You must provide exactly one table description relevant to the user's query.
 
     * **Column Descriptions:**
-    If the user's query is more relevant to specific columns, you should provide a set of column descriptions that are relevant to the user's query.
+    You must provide exactly one column description relevant to the user's query.
     """
 
     Text_To_SQL_PROMPT = """

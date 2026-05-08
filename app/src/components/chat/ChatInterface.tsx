@@ -23,22 +23,7 @@ interface ChatMessageData {
   }>;
   queryData?: any[]; // For table data
   visualizationData?: {
-    csv_data: string;
-    schema_info: {
-      columns: string[];
-      numeric_columns: string[];
-      categorical_columns: string[];
-      datetime_columns: string[];
-      row_count: number;
-      unique_counts?: Record<string, number>;
-      error?: string;
-    };
-    visualization_dsl: {
-      chart_type: string;
-      data_columns: string[];
-      config: Record<string, any>;
-      layout: Record<string, any>;
-    };
+    should_visualize: boolean;
   };
   analysisInfo?: {
     confidence?: number;
@@ -210,7 +195,7 @@ const ChatInterface = ({
         } else if (message.type === 'query_result') {
           // Store query results to display as table - backend sends it in 'data' field
           queryResults = message.data || [];
-          visualizationData = message.visualization;
+          visualizationData = { should_visualize: Boolean(message.should_visualize) };
         } else if (message.type === 'ai_response') {
           // AI-generated response - this is what we show to the user
           const responseContent = (message.message || message.content || '').trim();
@@ -385,7 +370,7 @@ const ChatInterface = ({
         } else if (message.type === 'query_result') {
           // Store query results
           queryResults = message.data || [];
-          visualizationData = message.visualization;
+          visualizationData = { should_visualize: Boolean(message.should_visualize) };
         } else if (message.type === 'ai_response') {
           // AI-generated response
           const responseContent = (message.message || message.content || '').trim();

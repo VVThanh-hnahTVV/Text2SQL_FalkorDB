@@ -2,12 +2,10 @@
 # pylint: disable=line-too-long,trailing-whitespace
 
 import asyncio
-import csv
 import json
 import logging
 import os
 import time
-from io import StringIO
 from typing import Any
 
 from pydantic import BaseModel
@@ -24,7 +22,6 @@ from api.loaders.postgres_loader import PostgresLoader
 from api.loaders.mysql_loader import MySQLLoader
 from api.memory.graphiti_tool import MemoryTool
 from api.sql_utils import SQLIdentifierQuoter, DatabaseSpecificQuoter
-from api.visualization import VisualizationService, analyze_csv_schema
 
 # Use the same delimiter as in the JavaScript
 MESSAGE_DELIMITER = "|||FALKORDB_MESSAGE_BOUNDARY|||"
@@ -32,37 +29,17 @@ MESSAGE_DELIMITER = "|||FALKORDB_MESSAGE_BOUNDARY|||"
 GENERAL_PREFIX = os.getenv("GENERAL_PREFIX")
 
 
-def _query_results_to_csv(query_results: list[dict[str, Any]]) -> str:
-    """Convert list-of-dict SQL results into CSV string."""
-    if not query_results:
-        return ""
-
-    fieldnames = [str(field) for field in query_results[0].keys()]
-    buffer = StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in query_results:
-        writer.writerow({name: row.get(name) for name in fieldnames})
-    return buffer.getvalue()
-
-
-def _build_visualization_payload(
-    query_results: list[dict[str, Any]], question: str
-) -> dict[str, Any]:
-    """Build CSV + schema + DSL payload while preserving failures gracefully."""
-    csv_data = _query_results_to_csv(query_results)
-    schema_info = analyze_csv_schema(csv_data)
-    visualization_service = VisualizationService()
-    dsl = visualization_service.generate_visualization(
-        csv_data=csv_data,
-        question=question,
-        schema_info=schema_info,
+def _should_visualize(query_results: list[dict[str, Any]]) -> bool:
+    """Heuristic: visualize when there are at least 2 rows, 2+ columns, and >=1 numeric column."""
+    if not query_results or len(query_results) < 2:
+        return False
+    sample = query_results[0]
+    if len(sample) < 2:
+        return False
+    return any(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in sample.values()
     )
-    return {
-        "csv_data": csv_data,
-        "schema_info": schema_info,
-        "visualization_dsl": dsl.to_dict(),
-    }
 
 class GraphData(BaseModel):
     """Graph data model.
@@ -236,7 +213,12 @@ async def get_schema(user_id: str, graph_id: str):  # pylint: disable=too-many-l
     # print("***************** get_schema: links", links)
     return {"nodes": nodes, "links": links}
 
-async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  # pylint: disable=too-many-statements
+async def query_database(  # pylint: disable=too-many-statements
+    user_id: str,
+    graph_id: str,
+    chat_data: ChatRequest,
+    memory_user_id: str | None = None,
+):
     """
     Query the Database with the given graph_id and chat_data.
     
@@ -272,8 +254,9 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
 
     logging.info("User Query: %s", sanitize_query(queries_history[-1]))
 
+    memory_user_id = (memory_user_id or user_id).strip() or user_id
     if chat_data.use_memory:
-        memory_tool_task = asyncio.create_task(MemoryTool.create(user_id, graph_id))
+        memory_tool_task = asyncio.create_task(MemoryTool.create(memory_user_id, graph_id))
     else:
         memory_tool_task = None
 
@@ -598,15 +581,11 @@ What this will do:
                             }) + MESSAGE_DELIMITER
 
                         if len(query_results) != 0:
-                            visualization_payload = _build_visualization_payload(
-                                query_results=query_results,
-                                question=queries_history[-1] if queries_history else "",
-                            )
                             yield json.dumps(
                                 {
                                     "type": "query_result",
                                     "data": query_results,
-                                    "visualization": visualization_payload,
+                                    "should_visualize": _should_visualize(query_results),
                                     "final_response": False
                                 }
                             ) + MESSAGE_DELIMITER
@@ -783,6 +762,7 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
     user_id: str,
     graph_id: str,
     confirm_data: ConfirmRequest,
+    memory_user_id: str | None = None,
 ):
     """
     Handle user confirmation for destructive SQL operations
@@ -803,11 +783,13 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
     if not sql_query:
         raise InvalidArgumentError("No SQL query provided")
 
+    memory_user_id = (memory_user_id or user_id).strip() or user_id
+
     # Create a generator function for streaming the confirmation response
     async def generate_confirmation():  # pylint: disable=too-many-locals,too-many-statements
         # Create memory tool for saving query results
         try:
-            memory_tool = await MemoryTool.create(user_id, graph_id)
+            memory_tool = await MemoryTool.create(memory_user_id, graph_id)
         except Exception as mem_error:  # pylint: disable=broad-exception-caught
             logging.warning(
                 "Memory initialization failed for destructive operation; continuing without memory: %s",
@@ -872,15 +854,11 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
                     loader_class.is_schema_modifying_query(sql_query)
                 )
                 query_results = loader_class.execute_sql_query(sql_query, db_url)
-                visualization_payload = _build_visualization_payload(
-                    query_results=query_results,
-                    question=queries_history[-1] if queries_history else "Destructive operation",
-                )
                 yield json.dumps(
                     {
                         "type": "query_result",
                         "data": query_results,
-                        "visualization": visualization_payload,
+                        "should_visualize": _should_visualize(query_results),
                     }
                 ) + MESSAGE_DELIMITER
 

@@ -12,8 +12,8 @@ from psycopg2 import sql
 import tqdm
 
 from api.loaders.base_loader import BaseLoader  # pylint: disable=import-error
-from api.loaders.graph_loader import load_to_graph  
-
+from api.loaders.graph_loader import load_to_graph
+from api.loaders.schema_description_enrichment import enrich_entities
 from pprint import pprint
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -311,6 +311,7 @@ class PostgresLoader(BaseLoader):
             }
         # print('PostgresLoader.extract_tables_info: entities')
         # pprint(entities, width=120, compact=False)
+        enrich_entities(entities)
         return entities
 
     @staticmethod

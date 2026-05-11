@@ -13,6 +13,7 @@ from pymysql.cursors import DictCursor
 
 from api.loaders.base_loader import BaseLoader
 from api.loaders.graph_loader import load_to_graph
+from api.loaders.schema_description_enrichment import enrich_entities
 
 
 class MySQLQueryError(Exception):
@@ -263,6 +264,7 @@ class MySQLLoader(BaseLoader):
                 'row_count': row_count
             }
 
+        enrich_entities(entities)
         return entities
 
     @staticmethod

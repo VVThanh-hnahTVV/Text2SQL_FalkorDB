@@ -170,10 +170,10 @@ class Config:
 
     **Output:**
     * **Table Descriptions:**
-    You must provide exactly one table description relevant to the user's query.
+    You must provide exactly one table description that best matches the combined context of previous user queries and the current user query.
 
     * **Column Descriptions:**
-    You must provide exactly one column description relevant to the user's query.
+    You must provide exactly one column description that best matches the combined context of previous user queries and the current user query.
     """
 
     Text_To_SQL_PROMPT = """

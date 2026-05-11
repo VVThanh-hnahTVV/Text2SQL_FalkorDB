@@ -56,11 +56,12 @@ export function adviceTypeToBuilderType(adviceType?: string): string | null {
 
 /**
  * Pull encode field names from an advice spec when available.
- * AVA emits Vega-Lite-ish specs; encode keys we care about: x, y, color (labels for pie).
+ * Cart charts: x, y, color (series). Pie: labels + values from category/measure channels.
  */
 export function extractAxesFromAdvice(advice?: Advice): {
   x?: string;
   y?: string;
+  color?: string;
   labels?: string;
   values?: string;
 } {
@@ -78,12 +79,23 @@ export function extractAxesFromAdvice(advice?: Advice): {
 
   const x = fieldOf(encode.x);
   const y = fieldOf(encode.y);
-  const color = fieldOf(encode.color);
+  const colorChannel = fieldOf(encode.color);
+
+  const builderKind = adviceTypeToBuilderType(advice?.type);
+  if (builderKind === 'pie') {
+    const labels = colorChannel || x;
+    const values = y;
+    return {
+      labels,
+      values,
+      x,
+      y,
+    };
+  }
 
   return {
     x,
     y,
-    labels: color ?? x,
-    values: y,
+    color: colorChannel,
   };
 }

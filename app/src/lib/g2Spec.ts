@@ -1,9 +1,29 @@
+export type BarLayoutMode = 'single' | 'grouped' | 'stacked';
+
 export interface SpecOptions {
   x?: string;
   y?: string;
   labels?: string;
   values?: string;
   title?: string;
+  /** Series / group channel (bar, line, scatter). Omit or empty for single-series. */
+  color?: string;
+  /** Bubble size field (scatter only). */
+  size?: string;
+  /** Used only when chartType is bar and color is set. */
+  barLayout?: BarLayoutMode;
+}
+
+function channelsDistinct(
+  channels: Array<string | undefined>,
+): boolean {
+  const seen = new Set<string>();
+  for (const ch of channels) {
+    if (!ch) continue;
+    if (seen.has(ch)) return false;
+    seen.add(ch);
+  }
+  return true;
 }
 
 /**
@@ -23,34 +43,63 @@ export function buildG2Spec(
     title: { title: baseTitle },
   };
 
+  const color = opts.color?.trim();
+  const size = opts.size?.trim();
+
   switch (ct) {
     case 'bar': {
       if (!opts.x || !opts.y) return null;
+      if (color && !channelsDistinct([opts.x, opts.y, color])) return null;
+      const layout = opts.barLayout ?? 'grouped';
+      const encode: Record<string, string> = { x: opts.x, y: opts.y };
+      if (color) encode.color = color;
+
+      const transform: Array<Record<string, any>> = [];
+      if (color) {
+        if (layout === 'stacked') transform.push({ type: 'stackY' });
+        else transform.push({ type: 'dodgeX' });
+      }
+
       return {
         type: 'interval',
         data,
-        encode: { x: opts.x, y: opts.y, color: opts.x },
+        encode,
+        ...(transform.length ? { transform } : {}),
         axis: { x: { title: opts.x }, y: { title: opts.y } },
-        legend: false,
+        legend: Boolean(color),
         ...commonAxis,
       };
     }
     case 'line': {
       if (!opts.x || !opts.y) return null;
+      if (color && !channelsDistinct([opts.x, opts.y, color])) return null;
+      const encode: Record<string, string | undefined> = {
+        x: opts.x,
+        y: opts.y,
+        shape: 'smooth',
+      };
+      if (color) encode.color = color;
+
       return {
         type: 'line',
         data,
-        encode: { x: opts.x, y: opts.y, shape: 'smooth' },
+        encode,
         axis: { x: { title: opts.x }, y: { title: opts.y } },
         ...commonAxis,
       };
     }
     case 'scatter': {
       if (!opts.x || !opts.y) return null;
+      if (color && !channelsDistinct([opts.x, opts.y, color])) return null;
+      if (size && !channelsDistinct([opts.x, opts.y, ...(color ? [color] : []), size])) return null;
+      const encode: Record<string, string> = { x: opts.x, y: opts.y };
+      if (color) encode.color = color;
+      if (size) encode.size = size;
+
       return {
         type: 'point',
         data,
-        encode: { x: opts.x, y: opts.y },
+        encode,
         axis: { x: { title: opts.x }, y: { title: opts.y } },
         ...commonAxis,
       };
@@ -81,11 +130,15 @@ export function buildG2Spec(
     }
     case 'box': {
       if (!opts.y) return null;
+      if (opts.x && opts.x === opts.y) return null;
+      const encode: Record<string, string> = opts.x ? { x: opts.x, y: opts.y } : { y: opts.y };
+      const axis: Record<string, { title: string }> = { y: { title: opts.y } };
+      if (opts.x) axis.x = { title: opts.x };
       return {
         type: 'boxplot',
         data,
-        encode: { y: opts.y },
-        axis: { y: { title: opts.y } },
+        encode,
+        axis,
         ...commonAxis,
       };
     }

@@ -292,6 +292,29 @@ class AnalysisAgent(BaseAgent):
     - Use target SQL dialect quoting/syntax.
     - No markdown fences, no extra text outside JSON.
 
+    Output column readability (apply to EVERY column in the SELECT list):
+    - Always alias every selected column/expression using `AS` with a human-readable label.
+    - Aliases must be Title Case English by default, with spaces (e.g. "Total Revenue", "Order Count", "Customer Name").
+        If the user query is in another language (e.g. Vietnamese), use the same language for aliases ("Tổng doanh thu", "Số đơn hàng").
+    - Expand common abbreviations when they are unambiguous (qty -> Quantity, amt -> Amount, num -> Number, avg -> Average, pct -> Percent, id -> ID).
+    - Replace snake_case / camelCase with spaces; do NOT keep raw column names like `total_amt` in the output.
+    - Quote aliases that contain spaces or non-ASCII characters using the dialect's identifier quoting (PostgreSQL/SQLite: double quotes, MySQL: backticks).
+    - For aggregates always alias explicitly (e.g. `SUM(o.amount) AS "Total Revenue"`, `COUNT(*) AS "Order Count"`).
+    - Keep aliases unique within the statement.
+
+    Time/date normalization (apply to EVERY date/time/timestamp column or expression in the SELECT list):
+    - Format date/time values into human-readable strings using the target dialect's formatter and alias them.
+    - Default formats:
+        * Date only -> `YYYY-MM-DD` (e.g. "2024-03-15").
+        * Datetime/timestamp -> `YYYY-MM-DD HH24:MI` (24-hour) (e.g. "2024-03-15 14:30").
+        * If the user explicitly asks for month/quarter/year aggregation, use `YYYY-MM`, `YYYY-Qn`, or `YYYY` accordingly.
+    - Dialect helpers:
+        * PostgreSQL: `TO_CHAR(col, 'YYYY-MM-DD HH24:MI')`.
+        * MySQL: `DATE_FORMAT(col, '%Y-%m-%d %H:%i')`.
+        * SQLite: `strftime('%Y-%m-%d %H:%M', col)`.
+    - When the column is used both for filtering/sorting AND output, sort/filter by the raw column but SELECT the formatted alias (e.g. `ORDER BY o.created_at DESC` while selecting `TO_CHAR(o.created_at, 'YYYY-MM-DD HH24:MI') AS "Created At"`).
+    - Preserve timezone semantics already present in the column type; do not invent timezone conversions unless the user asks.
+
     Output JSON only:
     {{
     "is_sql_translatable": true/false,

@@ -235,7 +235,6 @@ class AnalysisAgent(BaseAgent):
 #         print("***************** Analysis Agent: memory_context", memory_context)
         if has_memory:
             memory_section = f"""
-            <memory_context>
             The following information contains relevant context from previous interactions:
 
             {memory_context}
@@ -250,7 +249,7 @@ class AnalysisAgent(BaseAgent):
             7. Never drop carried-over filter values from prior context (e.g., if prior scope is US + UK, keep both US and UK).
             8. For multi-value carried scope, use IN (...) or equivalent OR conditions so all values are included.
             9. If prior context implies multiple values but current SQL includes only a subset without explicit narrowing, treat it as incomplete.
-            </memory_context>
+            
         """
             memory_instructions = """
             - Use <memory_context> only to resolve follow-ups and previously established conventions.
@@ -291,6 +290,15 @@ class AnalysisAgent(BaseAgent):
     - If information is missing from schema/question, set is_sql_translatable=false and explain.
     - Use target SQL dialect quoting/syntax.
     - No markdown fences, no extra text outside JSON.
+
+    SQL layout and readability (apply to sql_query string; valid SQL, not prose):
+    - Put each major clause on its own line: SELECT, FROM, JOINs, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT/OFFSET (if used).
+    - One SELECT expression per line with a trailing comma after each except the last.
+    - Indent JOIN ... ON under FROM; indent continued AND/OR predicates under WHERE when predicates wrap.
+    - Use UPPERCASE for SQL reserved words (SELECT, FROM, INNER JOIN, LEFT JOIN, WHERE, AND, OR, GROUP BY, ORDER BY, HAVING, WITH, AS).
+    - Use short meaningful table aliases (e.g. orders o, customers c), not t1/t2 unless unavoidable.
+    - For multi-step logic, prefer WITH named_cte AS (...) CTEs with descriptive snake_case names over deep nested subqueries.
+    - Avoid a single very long line; break at natural boundaries so a human can scan the statement quickly.
 
     Output column readability (apply to EVERY column in the SELECT list):
     - Always alias every selected column/expression using `AS` with a human-readable label.

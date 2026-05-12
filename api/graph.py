@@ -121,7 +121,7 @@ async def _find_tables(
         List of matching table information.
     """
     query = """
-        CALL db.idx.vector.queryNodes('Table','embedding',1,vecf32($embedding))
+        CALL db.idx.vector.queryNodes('Table','embedding',3,vecf32($embedding))
         YIELD node, score
         MATCH (node)-[:BELONGS_TO]-(columns)
         RETURN node.name, node.description, node.foreign_keys, collect({
@@ -159,7 +159,7 @@ async def _find_tables_by_columns(
         List of matching table information.
     """
     query = """
-        CALL db.idx.vector.queryNodes('Column','embedding',2,vecf32($embedding))
+        CALL db.idx.vector.queryNodes('Column','embedding',3,vecf32($embedding))
         YIELD node, score
         MATCH (node)-[:BELONGS_TO]-(table)-[:BELONGS_TO]-(columns)
         RETURN

@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { useDatabase } from "@/contexts/DatabaseContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { useChat } from "@/contexts/ChatContext";
+import { useChat, type ChatMessageData } from "@/contexts/ChatContext";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import ChatMessage from "./ChatMessage";
@@ -12,34 +12,14 @@ import SuggestionCards from "../SuggestionCards";
 import { ChatService } from "@/services/chat";
 import type { ConfirmRequest } from "@/types/api";
 import { getVendorPrefix } from "@/utils/vendorConfig";
-
-interface ChatMessageData {
-  id: string;
-  type: 'user' | 'ai' | 'ai-steps' | 'sql-query' | 'query-result' | 'confirmation';
-  content: string;
-  steps?: Array<{
-    icon: 'search' | 'database' | 'code' | 'message';
-    text: string;
-  }>;
-  queryData?: any[]; // For table data
-  visualizationData?: {
-    should_visualize: boolean;
-  };
-  analysisInfo?: {
-    confidence?: number;
-    missing?: string;
-    ambiguities?: string;
-    explanation?: string;
-    isValid?: boolean;
-  };
-  confirmationData?: {
-    sqlQuery: string;
-    operationType: string;
-    message: string;
-    chatHistory: string[];
-  };
-  timestamp: Date;
-}
+import { getOrInitDemoRole, setDemoRole, type DemoRole } from "@/lib/demoRole";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface ChatInterfaceProps {
   className?: string;
@@ -62,6 +42,7 @@ const ChatInterface = ({
   const { messages, setMessages, conversationHistory, isProcessing, setIsProcessing } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [demoRole, setDemoRoleState] = useState<DemoRole>(() => getOrInitDemoRole());
 
   // Scroll the chat pane only (scrollIntoView can target the wrong ancestor when Plotly/layout inflates).
   const scrollToBottom = () => {
@@ -158,11 +139,12 @@ const ChatInterface = ({
         query,
         database: selectedGraph.id,
         history: historySnapshot,
-        customApiKey: isApiKeyValid ? apiKey : undefined,
+        customApiKey: isApiKeyValid ? (apiKey ?? undefined) : undefined,
         customModel: isApiKeyValid ? modelName : undefined,
-        customVendor: isApiKeyValid ? vendor : undefined,
+        customVendor: isApiKeyValid ? (vendor ?? undefined) : undefined,
         use_user_rules: useRulesFromDatabase,
         use_memory: useMemory,
+        role: demoRole,
       })) {
         
         if (message.type === 'status' || message.type === 'reasoning' || message.type === 'reasoning_step') {
@@ -206,12 +188,13 @@ const ChatInterface = ({
           finalContent = followupContent;
         } else if (message.type === 'error') {
           // Handle error
+          const errText = (message.message || message.content || '').trim() || 'Unknown error';
           toast({
             title: "Query Failed",
-            description: message.content,
+            description: errText,
             variant: "destructive",
           });
-          finalContent = `Error: ${message.content}`;
+          finalContent = `Error: ${errText}`;
         } else if (message.type === 'confirmation' || message.type === 'destructive_confirmation') {
           // Handle destructive operation confirmation - add inline confirmation message
           const confirmationMessage: ChatMessageData = {
@@ -351,6 +334,7 @@ const ChatInterface = ({
             : `${vendorPrefix}/${modelName}`;
         }
       }
+      confirmRequest.role = demoRole;
 
       // Stream the confirmation response
       for await (const message of ChatService.streamConfirmOperation(
@@ -540,6 +524,24 @@ const ChatInterface = ({
       {/* Bottom Section with Suggestions and Input (grid row 2) */}
       <div className="min-h-0 border-t border-border bg-background">
         <div className="p-6">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">Demo role</span>
+            <Select
+              value={demoRole}
+              onValueChange={(v: DemoRole) => {
+                setDemoRole(v);
+                setDemoRoleState(v);
+              }}
+            >
+              <SelectTrigger className="h-9 w-[200px]" data-testid="demo-role-select">
+                <SelectValue placeholder="Role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Admin (destructive allowed)</SelectItem>
+                <SelectItem value="viewer">Viewer (read-only destructive)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {/* Suggestion Cards - Only show for DEMO_CRM database */}
           {(selectedGraph?.id === 'DEMO_CRM' || selectedGraph?.name === 'DEMO_CRM') && (
             <SuggestionCards

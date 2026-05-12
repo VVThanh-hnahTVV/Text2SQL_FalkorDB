@@ -27,6 +27,8 @@ export interface ChatRequest {
   customVendor?: 'openai' | 'google' | 'anthropic';
   use_user_rules?: boolean; // If true, backend fetches rules from database
   use_memory?: boolean;
+  /** Demo only: "viewer" blocks destructive SQL; "admin" allows confirmation flow */
+  role?: 'admin' | 'viewer';
 }
 
 export interface ConversationMessage {
@@ -81,6 +83,8 @@ export interface ConfirmRequest {
   use_user_rules?: boolean; // If true, backend fetches rules from database
   custom_api_key?: string;
   custom_model?: string;
+  /** Demo only: must be admin to execute confirmed destructive SQL */
+  role?: 'admin' | 'viewer';
 }
 
 // Upload types

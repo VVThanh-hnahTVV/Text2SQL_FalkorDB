@@ -74,7 +74,8 @@ export class ChatService {
           }),
           ...(request.use_memory !== undefined && {
             use_memory: request.use_memory
-          })
+          }),
+          ...(request.role !== undefined && { role: request.role }),
         }),
         credentials: 'include',
       });

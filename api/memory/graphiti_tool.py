@@ -262,8 +262,6 @@ class MemoryTool:
         if conversation.get('answer'):
             conv_text += f"Assistant: {conversation['answer']}\n"
 
-        print("***************** update_user_information: conv_text", conv_text)
-        print("***************** update_user_information: summary", summary)
         prompt = f"""
                 You are updating the personal memory of user.
                 ### Inputs
@@ -546,7 +544,9 @@ class MemoryTool:
                 MATCH (e:Episodic {uuid: $uuid})
                 RETURN e.content AS content
                 """
-        episodes_uuid = rel_result.episodes
+        episodes_uuid = getattr(rel_result, "episodes", None)
+        if not isinstance(episodes_uuid, (list, tuple)):
+            return []
 
         episode_contents = []
         for episode_uuid in episodes_uuid:
@@ -569,43 +569,56 @@ class MemoryTool:
             String containing all relevant database facts with time relevancy information
         """
         try:
+            # Preserve NL query: do not reuse name `query` for Cypher (was shadowing user text).
+            user_search_query = query
             driver = self.graphiti_client.driver
-            query = """
+            entity_cypher = """
                     MATCH (e:Entity {name: $name})
                     RETURN e.uuid AS uuid
                     """
-            result, __, _ = await driver.execute_query(query, name=f"Database {self.graph_id}")
-            center_node_uuid = result[0].get("uuid", "")
+            rows, __, _ = await driver.execute_query(
+                entity_cypher, name=f"Database {self.graph_id}"
+            )
+            center_node_uuid = rows[0].get("uuid", "") if rows else ""
+            if not center_node_uuid:
+                logging.warning(
+                    "search_database_facts: no Entity for %s; skip Graphiti search",
+                    f"Database {self.graph_id}",
+                )
+                return "Previous sessions:\n\n\nFacts:\n"
             reranked_results = await self.graphiti_client.search(
-                query=query,
+                query=user_search_query,
                 center_node_uuid=center_node_uuid,
                 num_results=limit
             )
-            
+            if reranked_results is None:
+                reranked_results = []
+
             # Filter and format results for database-specific content into a single string
             database_facts_text = []
             episodes_contents = []
-            if reranked_results and len(reranked_results) > 0:
+            if reranked_results:
                 logging.info("Previous session and facts for %s:", self.graph_id)
-                for i, result in enumerate(reranked_results, 1):
-                    if result.source_node_uuid != center_node_uuid and result.target_node_uuid != center_node_uuid:
+                for ritem in reranked_results:
+                    try:
+                        if len(episodes_contents) < episode_limit:
+                            episodes_content = await self.extract_episode_from_rel(ritem)
+                            episodes_contents.extend(episodes_content)
+                        fact_entry = f"{getattr(ritem, 'fact', '') or ''}"
+
+                        # Add time information if available
+                        time_info = []
+                        if hasattr(ritem, "valid_at") and ritem.valid_at:
+                            time_info.append(f"Valid from: {ritem.valid_at}")
+                        if hasattr(ritem, "invalid_at") and ritem.invalid_at:
+                            time_info.append(f"Valid until: {ritem.invalid_at}")
+
+                        if time_info:
+                            fact_entry += f" ({', '.join(time_info)})"
+
+                        database_facts_text.append(fact_entry)
+                    except Exception:
                         continue
-                    if len(episodes_contents) < episode_limit:
-                        episodes_content = await self.extract_episode_from_rel(result)
-                        episodes_contents.extend(episodes_content)
-                    fact_entry = f"{result.fact}"
-                    
-                    # Add time information if available
-                    time_info = []
-                    if hasattr(result, 'valid_at') and result.valid_at:
-                        time_info.append(f"Valid from: {result.valid_at}")
-                    if hasattr(result, 'invalid_at') and result.invalid_at:
-                        time_info.append(f"Valid until: {result.invalid_at}")
-                    
-                    if time_info:
-                        fact_entry += f" ({', '.join(time_info)})"
-                    
-                    database_facts_text.append(fact_entry)
             facts = "\n".join(database_facts_text) if database_facts_text else ""
             episodes = "\n".join(episodes_contents) if episodes_contents else ""
             database_context = "Previous sessions:\n" + episodes + "\n\nFacts:\n" + facts

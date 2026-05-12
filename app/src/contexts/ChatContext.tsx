@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import { useDatabase } from '@/contexts/DatabaseContext';
 import type { ConversationMessage } from '@/types/api';
 
-interface ChatMessageData {
+export interface ChatMessageData {
   id: string;
   type: 'user' | 'ai' | 'ai-steps' | 'sql-query' | 'query-result' | 'confirmation';
   content: string;
@@ -11,6 +11,9 @@ interface ChatMessageData {
     text: string;
   }>;
   queryData?: any[];
+  visualizationData?: {
+    should_visualize: boolean;
+  };
   analysisInfo?: {
     confidence?: number;
     missing?: string;

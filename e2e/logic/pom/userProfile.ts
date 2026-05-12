@@ -1,6 +1,6 @@
 import { Locator } from "@playwright/test";
 import { waitForElementToBeVisible } from "../../infra/utils";
-import BasePage from "../../infra/ui/basePage";
+import BasePage from "../../infra/api/ui/basePage";
 
 /**
  * UserProfile class handles all user profile dropdown and API tokens functionality.

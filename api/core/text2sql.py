@@ -63,6 +63,7 @@ class ChatRequest(BaseModel):
     custom_model: str | None = None
     use_user_rules: bool = True  # If True, fetch rules from database; if False, don't use rules
     use_memory: bool = True
+    role: str | None = None  # Demo: "viewer" blocks destructive SQL; omit or "admin" allows
 
 
 class ConfirmRequest(BaseModel):
@@ -76,6 +77,7 @@ class ConfirmRequest(BaseModel):
     chat: list = []
     custom_api_key: str | None = None
     custom_model: str | None = None
+    role: str | None = None  # Demo: must match chat role to execute confirmed destructive SQL
 
 
 def get_database_type_and_loader(db_url: str):
@@ -105,6 +107,16 @@ def sanitize_log_input(value: str) -> str:
     return value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
 
 DEFAULT_USER_ID = "default"
+
+
+def destructive_role_allowed(role: str | None) -> bool:
+    """Demo-only: block destructive SQL when role is explicitly viewer.
+
+    Missing or unknown values are treated as admin for backward compatibility.
+    """
+    if role is None:
+        return True
+    return str(role).strip().lower() != "viewer"
 
 
 def _graph_name(user_id: str, graph_id:str) -> str:
@@ -438,6 +450,25 @@ async def query_database(  # pylint: disable=too-many-statements
                 is_destructive = sql_type in destructive_ops
                 general_graph = graph_id.startswith(GENERAL_PREFIX) if GENERAL_PREFIX else False
                 if is_destructive and not general_graph:
+                    if not destructive_role_allowed(chat_data.role):
+                        msg = (
+                            "Destructive operations are not allowed for the viewer role. "
+                            "Switch to admin (demo role) to run INSERT/UPDATE/DELETE and similar."
+                        )
+                        yield json.dumps(
+                            {
+                                "type": "error",
+                                "final_response": True,
+                                "message": msg,
+                                "content": msg,
+                            }
+                        ) + MESSAGE_DELIMITER
+                        overall_elapsed = time.perf_counter() - overall_start
+                        logging.info(
+                            "Query blocked: destructive op disallowed for role=viewer - %.2fs",
+                            overall_elapsed,
+                        )
+                        return
                     # This is a destructive operation - ask for user confirmation
                     confirmation_message = f"""⚠️ DESTRUCTIVE OPERATION DETECTED ⚠️
 
@@ -799,6 +830,20 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
         result_history = []  # Initialize result_history for this context
 
         if confirmation == "CONFIRM":
+            if not destructive_role_allowed(confirm_data.role):
+                msg = (
+                    "Destructive operations are not allowed for the viewer role. "
+                    "Switch to admin (demo role) to confirm this operation."
+                )
+                yield json.dumps(
+                    {
+                        "type": "error",
+                        "final_response": True,
+                        "message": msg,
+                        "content": msg,
+                    }
+                ) + MESSAGE_DELIMITER
+                return
             try:
                 db_description, db_url = await get_db_description(graph_id)
 

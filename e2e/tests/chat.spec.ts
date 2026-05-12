@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { getBaseUrl, getTestDatabases } from '../config/urls';
 import { HomePage } from '../logic/pom/homePage';
-import BrowserWrapper from '../infra/ui/browserWrapper';
+import BrowserWrapper from '../infra/api/ui/browserWrapper';
 import ApiCalls from '../logic/api/apiCalls';
 
 // Chat feature tests - uses authenticated storageState from auth.setup
@@ -228,6 +228,7 @@ test.describe('Chat Feature Tests', () => {
   test('destructive operation shows inline confirmation and executes on confirm', async () => {
     const homePage = await browser.createNewPage(HomePage, getBaseUrl(), 'e2e/.auth/user.json');
     await browser.setPageToFullScreen();
+    await homePage.forceDemoRoleAdminForE2E();
 
     // Ensure database is connected
     await homePage.ensureDatabaseConnected(apiCall);
@@ -271,6 +272,7 @@ test.describe('Chat Feature Tests', () => {
     test.slow(); // Two LLM round-trips with confirmation dialogs need extra time in CI
     const homePage = await browser.createNewPage(HomePage, getBaseUrl(), 'e2e/.auth/user.json');
     await browser.setPageToFullScreen();
+    await homePage.forceDemoRoleAdminForE2E();
 
     // Ensure database is connected
     await homePage.ensureDatabaseConnected(apiCall);

@@ -12,7 +12,9 @@ from psycopg2 import sql
 import tqdm
 
 from api.loaders.base_loader import BaseLoader  # pylint: disable=import-error
-from api.loaders.graph_loader import load_to_graph  # pylint: disable=import-error
+from api.loaders.graph_loader import load_to_graph
+from api.loaders.schema_description_enrichment import enrich_entities
+from pprint import pprint
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -142,9 +144,11 @@ class PostgresLoader(BaseLoader):
         """
         try:
             parsed = urlparse(connection_url)
+
             query_params = parse_qs(parsed.query)
 
             options = query_params.get('options', [])
+         
             if not options:
                 return 'public'
 
@@ -200,6 +204,7 @@ class PostgresLoader(BaseLoader):
 
             # Extract database name from connection URL
             db_name = connection_url.split('/')[-1]
+            print('PostgresLoader.load: db_name', db_name)
             if '?' in db_name:
                 db_name = db_name.split('?')[0]
 
@@ -269,12 +274,24 @@ class PostgresLoader(BaseLoader):
         """, (schema, schema))
 
         tables = cursor.fetchall()
+        print('PostgresLoader.extract_tables_info: tables')
+        pprint(tables, width=120, compact=False)
 
         for table_name, table_comment in tqdm.tqdm(tables, desc="Extracting table information"):
             table_name = table_name.strip()
 
+            # Get total row count once per table to control sample size policy.
+            cursor.execute(
+                sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                    sql.Identifier(schema), sql.Identifier(table_name)
+                )
+            )
+            row_count = cursor.fetchone()[0] or 0
+
             # Get column information for this table
-            columns_info = PostgresLoader.extract_columns_info(cursor, table_name, schema)
+            columns_info = PostgresLoader.extract_columns_info(
+                cursor, table_name, schema, row_count=row_count
+            )
 
             # Get foreign keys for this table
             foreign_keys = PostgresLoader.extract_foreign_keys(cursor, table_name, schema)
@@ -289,13 +306,21 @@ class PostgresLoader(BaseLoader):
                 'description': table_description,
                 'columns': columns_info,
                 'foreign_keys': foreign_keys,
-                'col_descriptions': col_descriptions
+                'col_descriptions': col_descriptions,
+                'row_count': row_count
             }
-
+        # print('PostgresLoader.extract_tables_info: entities')
+        # pprint(entities, width=120, compact=False)
+        enrich_entities(entities)
         return entities
 
     @staticmethod
-    def extract_columns_info(cursor: Any, table_name: str, schema: str = 'public') -> Dict[str, Any]:
+    def extract_columns_info(
+        cursor: Any,
+        table_name: str,
+        schema: str = 'public',
+        row_count: int = 0
+    ) -> Dict[str, Any]:
         """
         Extract column information for a specific table.
 
@@ -371,9 +396,12 @@ class PostgresLoader(BaseLoader):
             if column_default:
                 description_parts.append(f"(Default: {column_default})")
 
+            # For small lookup/list tables, keep all values; otherwise sample 3 values.
+            sample_size = 3 if row_count > 20 else max(row_count, 0)
+
             # Extract sample values for the column (stored separately, not in description)
             sample_values = PostgresLoader.extract_sample_values_for_column(
-                cursor, table_name, col_name, data_type=data_type
+                cursor, table_name, col_name, sample_size=sample_size, data_type=data_type
             )
 
             columns_info[col_name] = {
@@ -384,7 +412,8 @@ class PostgresLoader(BaseLoader):
                 'default': column_default,
                 'sample_values': sample_values
             }
-
+        print('PostgresLoader.extract_columns_info: table_name', table_name)
+        pprint(columns_info, width=120, compact=False)
 
         return columns_info
 

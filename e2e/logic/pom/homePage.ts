@@ -1,6 +1,6 @@
 import { Locator, Page } from "@playwright/test";
 import { waitForElementToBeVisible, waitForElementToBeEnabled } from "../../infra/utils";
-import BasePage from "../../infra/ui/basePage";
+import BasePage from "../../infra/api/ui/basePage";
 import ApiCalls from "../api/apiCalls";
 import { getTestDatabases } from "../../config/urls";
 
@@ -1161,5 +1161,15 @@ export class HomePage extends BasePage {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * E2E: set demo SQL role to admin and reload (must match app/src/lib/demoRole.ts key).
+   */
+  async forceDemoRoleAdminForE2E(): Promise<void> {
+    await this.page.evaluate(() => {
+      sessionStorage.setItem('queryweaver_demo_role', 'admin');
+    });
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
   }
 }

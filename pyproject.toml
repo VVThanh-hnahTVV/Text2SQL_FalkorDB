@@ -19,8 +19,6 @@ dependencies = [
     "jinja2~=3.1.4",
     "graphiti-core[groq]>=0.28.1",
     "fastmcp>=2.13.1",
-    "pandas~=2.3.0",
-    "plotly~=6.3.0",
 ]
 
 [dependency-groups]

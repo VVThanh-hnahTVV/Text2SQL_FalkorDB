@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Database, Search, Code, MessageSquare, AlertTriangle, Copy, Check } from 'lucide-react';
-import Plot from 'react-plotly.js';
-import type { Data, Layout } from 'plotly.js';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Database, Search, Code, MessageSquare, AlertTriangle, Copy, Check, User } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,8 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { User as UserType } from '@/types/api';
-
+import G2Chart from './G2Chart';
+import {
+  adviceTypeToBuilderType,
+  extractAxesFromAdvice,
+  useAdvices,
+  type Advice,
+} from '@/lib/avaAdvisor';
+import { buildG2Spec } from '@/lib/g2Spec';
 interface Step {
   icon: 'search' | 'database' | 'code' | 'message';
   text: string;
@@ -28,22 +32,7 @@ interface ChatMessageProps {
   steps?: Step[];
   queryData?: any[]; // For table data
   visualizationData?: {
-    csv_data: string;
-    schema_info: {
-      columns: string[];
-      numeric_columns: string[];
-      categorical_columns: string[];
-      datetime_columns: string[];
-      row_count: number;
-      unique_counts?: Record<string, number>;
-      error?: string;
-    };
-    visualization_dsl: {
-      chart_type: string;
-      data_columns: string[];
-      config: Record<string, any>;
-      layout: Record<string, any>;
-    };
+    should_visualize: boolean;
   };
   analysisInfo?: {
     confidence?: number;
@@ -58,12 +47,13 @@ interface ChatMessageProps {
     message: string;
   };
   progress?: number; // Progress percentage for AI steps
-  user?: UserType | null; // User info for avatar
   onConfirm?: () => void;
   onCancel?: () => void;
 }
 
 type VisualizationData = NonNullable<ChatMessageProps['visualizationData']>;
+
+const OPTIONAL_NONE_VALUE = '__none__';
 
 const isChartTypeSupported = (chartType: string) =>
   ['line', 'bar', 'pie', 'scatter', 'histogram', 'box', 'table'].includes(chartType);
@@ -81,167 +71,45 @@ const CHART_TYPE_OPTIONS: { value: string; label: string }[] = [
 const hasColumn = (queryData: any[], column?: string) =>
   Boolean(column && queryData.length > 0 && Object.prototype.hasOwnProperty.call(queryData[0], column));
 
-const canRenderDsl = (queryData: any[], chartType: string, config: Record<string, any>) => {
+const channelsUniqueInDraft = (draft: ChartDraft, keys: Array<'x' | 'y' | 'color' | 'size'>) => {
+  const vals = keys.map((k) => draft[k]).filter(Boolean) as string[];
+  return new Set(vals).size === vals.length;
+};
+
+const canRenderDraftConfig = (queryData: any[], chartType: string, draft: ChartDraft) => {
   if (!queryData || queryData.length === 0) return false;
   const ct = chartType.toLowerCase();
   if (!isChartTypeSupported(ct)) return false;
   if (ct === 'line' || ct === 'bar' || ct === 'scatter') {
-    return hasColumn(queryData, config.x) && hasColumn(queryData, config.y);
+    if (!hasColumn(queryData, draft.x) || !hasColumn(queryData, draft.y)) return false;
+    if (draft.color) {
+      if (!hasColumn(queryData, draft.color)) return false;
+      if (!channelsUniqueInDraft(draft, ['x', 'y', 'color'])) return false;
+    }
+    if (ct === 'scatter' && draft.size) {
+      if (!hasColumn(queryData, draft.size)) return false;
+      if (!channelsUniqueInDraft(draft, ['x', 'y', 'color', 'size'])) return false;
+    }
+    if (ct === 'bar' && draft.color && draft.barLayout !== 'grouped' && draft.barLayout !== 'stacked') {
+      return false;
+    }
+    return true;
   }
   if (ct === 'pie') {
-    return hasColumn(queryData, config.labels) && hasColumn(queryData, config.values);
+    return hasColumn(queryData, draft.labels) && hasColumn(queryData, draft.values);
   }
   if (ct === 'histogram') {
-    return hasColumn(queryData, config.x);
+    return hasColumn(queryData, draft.x);
   }
   if (ct === 'box') {
-    return hasColumn(queryData, config.y);
+    if (!hasColumn(queryData, draft.y)) return false;
+    if (draft.x) {
+      if (!hasColumn(queryData, draft.x) || draft.x === draft.y) return false;
+    }
+    return true;
   }
+  // 'table' is rendered via the data table below; no chart needed.
   return true;
-};
-
-const canRenderChart = (queryData?: any[], visualizationData?: VisualizationData) => {
-  if (!queryData || queryData.length === 0 || !visualizationData) return false;
-  const dsl = visualizationData.visualization_dsl;
-  return canRenderDsl(queryData, dsl.chart_type, dsl.config || {});
-};
-
-const buildPlotlyConfigFromDsl = (
-  queryData: any[],
-  chartType: string,
-  config: Record<string, any>,
-  layoutIn: Record<string, any>,
-): { data: Data[]; layout: Partial<Layout> } => {
-  const ct = chartType.toLowerCase();
-  const layout: Partial<Layout> = {
-    title: layoutIn?.title || 'Query Results',
-    xaxis: { title: layoutIn?.xaxis_title || '' },
-    yaxis: { title: layoutIn?.yaxis_title || '' },
-    margin: { l: 40, r: 20, t: 48, b: 40 },
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-  };
-
-  if (ct === 'line') {
-    return {
-      data: [{ type: 'scatter', mode: 'lines+markers', x: queryData.map((row) => row[config.x]), y: queryData.map((row) => row[config.y]) }],
-      layout,
-    };
-  }
-  if (ct === 'bar') {
-    return {
-      data: [{ type: 'bar', x: queryData.map((row) => row[config.x]), y: queryData.map((row) => row[config.y]) }],
-      layout,
-    };
-  }
-  if (ct === 'pie') {
-    return {
-      data: [{ type: 'pie', labels: queryData.map((row) => row[config.labels]), values: queryData.map((row) => row[config.values]) }],
-      layout,
-    };
-  }
-  if (ct === 'scatter') {
-    return {
-      data: [{ type: 'scatter', mode: 'markers', x: queryData.map((row) => row[config.x]), y: queryData.map((row) => row[config.y]) }],
-      layout,
-    };
-  }
-  if (ct === 'histogram') {
-    return {
-      data: [{ type: 'histogram', x: queryData.map((row) => row[config.x]) }],
-      layout,
-    };
-  }
-  if (ct === 'box') {
-    return {
-      data: [{ type: 'box', y: queryData.map((row) => row[config.y]) }],
-      layout,
-    };
-  }
-
-  return {
-    data: [{ type: 'table', header: { values: Object.keys(queryData[0] || {}) }, cells: { values: Object.keys(queryData[0] || {}).map((key) => queryData.map((row) => row[key])) } }],
-    layout,
-  };
-};
-
-const buildPlotlyConfig = (queryData: any[], visualizationData: VisualizationData): { data: Data[]; layout: Partial<Layout> } => {
-  const dsl = visualizationData.visualization_dsl;
-  return buildPlotlyConfigFromDsl(queryData, dsl.chart_type, dsl.config || {}, dsl.layout || {});
-};
-
-/** Plotly + flex/scroll often mis-measure parents; strip explicit sizes so we control height via a fixed wrapper. */
-const layoutWithoutPlotDimensions = (layout: Partial<Layout>): Partial<Layout> => {
-  const { height: _h, width: _w, ...rest } = layout as Partial<Layout> & { height?: unknown; width?: unknown };
-  return rest;
-};
-
-const TABLE_PLOT_MAX_HEIGHT_PX = 480;
-const TABLE_ROW_PX = 26;
-const TABLE_PLOT_HEADER_PX = 100;
-
-const QueryResultPlot = ({
-  plotConfig,
-  rowCount,
-}: {
-  plotConfig: { data: Data[]; layout: Partial<Layout> };
-  rowCount: number;
-}) => {
-  const firstType = (plotConfig.data[0] as { type?: string } | undefined)?.type;
-  const isTable = firstType === 'table';
-
-  const tableHeightPx = Math.min(
-    TABLE_PLOT_MAX_HEIGHT_PX,
-    TABLE_PLOT_HEADER_PX + Math.min(Math.max(rowCount, 1), 40) * TABLE_ROW_PX,
-  );
-
-  const layoutBase = useMemo(
-    () => ({
-      ...layoutWithoutPlotDimensions(plotConfig.layout),
-      autosize: true as const,
-    }),
-    [plotConfig],
-  );
-
-  if (isTable) {
-    return (
-      <div className="mb-4 max-w-full -mx-4 px-4">
-        <div
-          className="max-h-[min(55vh,520px)] overflow-auto rounded border border-border bg-card p-2"
-          data-testid="query-results-plot"
-        >
-          <div className="relative min-h-[200px] w-full min-w-0" style={{ height: tableHeightPx }}>
-            <Plot
-              data={plotConfig.data}
-              layout={{ ...layoutBase, autosize: false, height: tableHeightPx }}
-              style={{ width: '100%', height: tableHeightPx }}
-              useResizeHandler={false}
-              config={{ responsive: true, displaylogo: false }}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mb-4 max-w-full -mx-4 px-4">
-      <div
-        className="overflow-hidden rounded border border-border bg-card p-2"
-        data-testid="query-results-plot"
-      >
-        <div className="relative h-[380px] w-full max-w-full shrink-0">
-          <Plot
-            data={plotConfig.data}
-            layout={layoutBase}
-            style={{ width: '100%', height: '100%' }}
-            useResizeHandler
-            config={{ responsive: true, displaylogo: false }}
-          />
-        </div>
-      </div>
-    </div>
-  );
 };
 
 type ChartDraft = {
@@ -250,6 +118,12 @@ type ChartDraft = {
   y: string;
   labels: string;
   values: string;
+  /** Series / group (bar, line, scatter). Empty = single series. */
+  color: string;
+  /** Bubble size (scatter). Empty = off. */
+  size: string;
+  /** bar + color only: dodge vs stack */
+  barLayout: 'grouped' | 'stacked';
 };
 
 const pickColumn = (columns: string[], preferred: string | undefined, fallbackIndex: number) => {
@@ -257,57 +131,74 @@ const pickColumn = (columns: string[], preferred: string | undefined, fallbackIn
   return columns[fallbackIndex] ?? '';
 };
 
-const deriveInitialDraft = (queryData: any[], visualizationData: VisualizationData): ChartDraft => {
+const deriveInitialDraft = (queryData: any[], topAdvice?: Advice): ChartDraft => {
   const columns = Object.keys(queryData[0] || {});
-  const config = visualizationData.visualization_dsl?.config || {};
-  let chartType = (visualizationData.visualization_dsl?.chart_type || 'bar').toLowerCase();
-  if (!isChartTypeSupported(chartType)) chartType = 'bar';
+  const adviceAxes = extractAxesFromAdvice(topAdvice);
+  const adviceChartType = adviceTypeToBuilderType(topAdvice?.type);
+  const chartType = adviceChartType && isChartTypeSupported(adviceChartType) ? adviceChartType : 'bar';
+
+  const x = pickColumn(columns, adviceAxes.x, 0);
+  const y = pickColumn(columns, adviceAxes.y, columns.length > 1 ? 1 : 0);
+
+  const emptyCartesianDraft = (): Omit<ChartDraft, 'chartType' | 'labels' | 'values'> => ({
+    x,
+    y,
+    color: '',
+    size: '',
+    barLayout: 'grouped',
+  });
+
+  if (chartType === 'pie') {
+    return {
+      chartType,
+      x,
+      y,
+      labels: pickColumn(columns, adviceAxes.labels, 0),
+      values: pickColumn(columns, adviceAxes.values, columns.length > 1 ? 1 : 0),
+      color: '',
+      size: '',
+      barLayout: 'grouped',
+    };
+  }
+
+  if (chartType === 'box') {
+    const boxY = pickColumn(columns, adviceAxes.y, columns.length > 1 ? 1 : 0);
+    const boxX =
+      adviceAxes.x && columns.includes(adviceAxes.x) && adviceAxes.x !== boxY ? adviceAxes.x : '';
+    return {
+      chartType,
+      x: boxX,
+      y: boxY,
+      labels: pickColumn(columns, adviceAxes.labels ?? x, 0),
+      values: pickColumn(columns, adviceAxes.values ?? y, columns.length > 1 ? 1 : 0),
+      color: '',
+      size: '',
+      barLayout: 'grouped',
+    };
+  }
+
+  let color = '';
+  if (
+    adviceAxes.color &&
+    columns.includes(adviceAxes.color) &&
+    adviceAxes.color !== x &&
+    adviceAxes.color !== y
+  ) {
+    color = adviceAxes.color;
+  } else {
+    const third = columns.find((c) => c !== x && c !== y);
+    color = third ?? '';
+  }
 
   return {
     chartType,
-    x: pickColumn(columns, config.x, 0),
-    y: pickColumn(columns, config.y, columns.length > 1 ? 1 : 0),
-    labels: pickColumn(columns, config.labels, 0),
-    values: pickColumn(columns, config.values, columns.length > 1 ? 1 : 0),
+    ...emptyCartesianDraft(),
+    color,
+    barLayout: 'grouped',
+    labels: pickColumn(columns, adviceAxes.labels ?? x, 0),
+    values: pickColumn(columns, adviceAxes.values ?? y, columns.length > 1 ? 1 : 0),
   };
 };
-
-const draftToConfig = (draft: ChartDraft): Record<string, any> => {
-  const ct = draft.chartType.toLowerCase();
-  if (ct === 'pie') return { labels: draft.labels, values: draft.values };
-  if (ct === 'histogram') return { x: draft.x };
-  if (ct === 'box') return { y: draft.y };
-  if (ct === 'table') return {};
-  return { x: draft.x, y: draft.y };
-};
-
-const buildLayoutForDraft = (baseLayout: Record<string, any>, draft: ChartDraft): Record<string, any> => {
-  const title = baseLayout?.title || 'Query Results';
-  const ct = draft.chartType.toLowerCase();
-  if (ct === 'line' || ct === 'bar' || ct === 'scatter') {
-    return { ...baseLayout, title, xaxis_title: draft.x, yaxis_title: draft.y };
-  }
-  if (ct === 'histogram') {
-    return { ...baseLayout, title, xaxis_title: draft.x, yaxis_title: baseLayout?.yaxis_title ?? '' };
-  }
-  if (ct === 'box') {
-    return { ...baseLayout, title, yaxis_title: draft.y, xaxis_title: baseLayout?.xaxis_title ?? '' };
-  }
-  if (ct === 'pie') {
-    return { ...baseLayout, title };
-  }
-  return { ...baseLayout, title };
-};
-
-const visualizationFromDraft = (base: VisualizationData, draft: ChartDraft): VisualizationData => ({
-  ...base,
-  visualization_dsl: {
-    ...base.visualization_dsl,
-    chart_type: draft.chartType,
-    config: draftToConfig(draft),
-    layout: buildLayoutForDraft(base.visualization_dsl.layout || {}, draft),
-  },
-});
 
 interface QueryResultBodyProps {
   queryData: any[];
@@ -348,41 +239,93 @@ const ColumnSelect = ({
   </div>
 );
 
+/** Column picker with explicit &quot;Không&quot; for optional channels (color, size, box X). */
+const OptionalColumnSelect = ({
+  id,
+  label,
+  value,
+  columns,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  columns: string[];
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) => (
+  <div className="space-y-1.5 min-w-0 flex-1">
+    <Label htmlFor={id} className="text-xs text-muted-foreground">
+      {label}
+    </Label>
+    <Select
+      value={value ? value : OPTIONAL_NONE_VALUE}
+      onValueChange={(v) => onChange(v === OPTIONAL_NONE_VALUE ? '' : v)}
+      disabled={disabled || columns.length === 0}
+    >
+      <SelectTrigger id={id} className="h-9 text-sm">
+        <SelectValue placeholder="Không" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={OPTIONAL_NONE_VALUE}>Không</SelectItem>
+        {columns.map((col) => (
+          <SelectItem key={col} value={col}>
+            {col}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+);
+
 const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps) => {
   const columns = useMemo(() => Object.keys(queryData[0] || {}), [queryData]);
-
-  const dslSignature = useMemo(() => {
-    if (!visualizationData) return '';
-    return JSON.stringify(visualizationData.visualization_dsl);
-  }, [visualizationData]);
-
   const columnsKey = columns.join('\0');
 
+  const shouldVisualize = Boolean(visualizationData?.should_visualize);
+  const advices = useAdvices(shouldVisualize ? queryData : undefined);
+  const topAdvice = advices[0];
+  const adviceSignature = useMemo(
+    () => (topAdvice ? `${topAdvice.type}|${JSON.stringify(topAdvice.spec ?? {})}` : ''),
+    [topAdvice],
+  );
+
   const [draft, setDraft] = useState<ChartDraft>(() =>
-    visualizationData ? deriveInitialDraft(queryData, visualizationData) : ({} as ChartDraft),
+    shouldVisualize ? deriveInitialDraft(queryData, topAdvice) : ({} as ChartDraft),
   );
   const [applied, setApplied] = useState<ChartDraft | null>(null);
 
   useEffect(() => {
-    if (!visualizationData || columns.length === 0) return;
-    setDraft(deriveInitialDraft(queryData, visualizationData));
+    if (!shouldVisualize || columns.length === 0) return;
+    setDraft(deriveInitialDraft(queryData, topAdvice));
     setApplied(null);
-  }, [dslSignature, columnsKey, visualizationData]);
+  }, [adviceSignature, columnsKey, shouldVisualize]);
 
   const handleCreateChart = useCallback(() => {
     setApplied({ ...draft });
   }, [draft]);
 
-  const appliedViz = useMemo(() => {
-    if (!applied || !visualizationData) return null;
-    return visualizationFromDraft(visualizationData, applied);
-  }, [applied, visualizationData]);
+  const canApply = shouldVisualize && canRenderDraftConfig(queryData, draft.chartType, draft);
 
-  const canApply = visualizationData && canRenderDsl(queryData, draft.chartType, draftToConfig(draft));
-  const plotConfig = useMemo(() => {
-    if (!appliedViz || !canRenderChart(queryData, appliedViz)) return null;
-    return buildPlotlyConfig(queryData, appliedViz);
-  }, [appliedViz, queryData]);
+  const chartSpec = useMemo(() => {
+    if (!applied) return null;
+    if (applied.chartType.toLowerCase() === 'table') return null;
+    if (!canRenderDraftConfig(queryData, applied.chartType, applied)) return null;
+    return buildG2Spec(queryData, applied.chartType, {
+      x:
+        applied.chartType === 'box'
+          ? applied.x || undefined
+          : applied.x,
+      y: applied.y,
+      labels: applied.labels,
+      values: applied.values,
+      color: applied.color || undefined,
+      size: applied.size || undefined,
+      barLayout:
+        applied.chartType === 'bar' && applied.color ? applied.barLayout : undefined,
+    });
+  }, [applied, queryData]);
 
   const headerChartBadge = applied?.chartType ?? draft.chartType;
 
@@ -391,7 +334,7 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Database className="w-4 h-4 text-success" />
         <span className="text-base font-semibold text-success">Query Results</span>
-        {visualizationData && headerChartBadge ? (
+        {shouldVisualize && headerChartBadge ? (
           <Badge variant="secondary" className="text-xs uppercase" data-testid="query-results-chart-type-badge">
             {headerChartBadge}
             {!applied && <span className="sr-only"> (mặc định)</span>}
@@ -402,10 +345,10 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
         </Badge>
       </div>
 
-      {visualizationData && columns.length > 0 ? (
+      {shouldVisualize && columns.length > 0 ? (
         <div className="mb-4 space-y-3 rounded-md border border-border bg-muted/30 p-3" data-testid="query-results-chart-builder">
           <p className="text-xs text-muted-foreground">
-            Giá trị mặc định theo gợi ý từ hệ thống. Chỉnh trục và loại biểu đồ, rồi bấm <span className="font-medium text-foreground">Tạo biểu đồ</span>.
+            Giá trị mặc định gợi ý bởi AntV AVA. Chỉnh trục và loại biểu đồ, rồi bấm <span className="font-medium text-foreground">Tạo biểu đồ</span>.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="space-y-1.5 w-full sm:w-44 sm:flex-none">
@@ -443,7 +386,44 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
                   columns={columns}
                   onChange={(y) => setDraft((d) => ({ ...d, y }))}
                 />
+                <OptionalColumnSelect
+                  id="chart-color"
+                  label="Màu / nhóm (color)"
+                  value={draft.color}
+                  columns={columns}
+                  onChange={(color) => setDraft((d) => ({ ...d, color }))}
+                />
               </>
+            ) : null}
+
+            {draft.chartType === 'bar' && draft.color ? (
+              <div className="space-y-1.5 w-full sm:w-40 sm:flex-none">
+                <Label className="text-xs text-muted-foreground">Kiểu cột</Label>
+                <Select
+                  value={draft.barLayout}
+                  onValueChange={(v) =>
+                    setDraft((d) => ({ ...d, barLayout: v as 'grouped' | 'stacked' }))
+                  }
+                >
+                  <SelectTrigger className="h-9 text-sm" data-testid="chart-bar-layout-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grouped">Nhóm cột</SelectItem>
+                    <SelectItem value="stacked">Chồng</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
+            {draft.chartType === 'scatter' ? (
+              <OptionalColumnSelect
+                id="chart-size"
+                label="Kích thước (size)"
+                value={draft.size}
+                columns={columns}
+                onChange={(size) => setDraft((d) => ({ ...d, size }))}
+              />
             ) : null}
 
             {draft.chartType === 'pie' ? (
@@ -476,13 +456,22 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
             ) : null}
 
             {draft.chartType === 'box' ? (
-              <ColumnSelect
-                id="chart-box-y"
-                label="Cột (trục Y)"
-                value={draft.y}
-                columns={columns}
-                onChange={(y) => setDraft((d) => ({ ...d, y }))}
-              />
+              <>
+                <OptionalColumnSelect
+                  id="chart-box-x"
+                  label="Phân loại (X, tuỳ chọn)"
+                  value={draft.x}
+                  columns={columns}
+                  onChange={(x) => setDraft((d) => ({ ...d, x }))}
+                />
+                <ColumnSelect
+                  id="chart-box-y"
+                  label="Giá trị (Y)"
+                  value={draft.y}
+                  columns={columns}
+                  onChange={(y) => setDraft((d) => ({ ...d, y }))}
+                />
+              </>
             ) : null}
 
             <Button
@@ -502,15 +491,22 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
         </div>
       ) : null}
 
-      {plotConfig ? (
-        <QueryResultPlot plotConfig={plotConfig} rowCount={queryData.length} />
-      ) : visualizationData ? (
+      {chartSpec ? (
+        <div className="mb-4 max-w-full -mx-4 px-4">
+          <div
+            className="overflow-hidden rounded border border-border bg-card p-2"
+            data-testid="query-results-plot"
+          >
+            <G2Chart spec={chartSpec} height={380} />
+          </div>
+        </div>
+      ) : shouldVisualize ? (
         <p className="text-sm text-muted-foreground mb-4" data-testid="query-results-chart-placeholder">
           Chưa có biểu đồ. Chọn cấu hình và bấm &quot;Tạo biểu đồ&quot;.
         </p>
       ) : null}
 
-      <div className={plotConfig ? '' : 'mt-0'}>
+      <div className={chartSpec ? '' : 'mt-0'}>
         <QueryResultsTable queryData={queryData} />
       </div>
     </>
@@ -547,7 +543,7 @@ const QueryResultsTable = ({ queryData }: { queryData: any[] }) => (
 );
 
 const ChatMessage = ({
-  type, content, steps, queryData, visualizationData, analysisInfo, confirmationData, progress, user, onConfirm, onCancel,
+  type, content, steps, queryData, visualizationData, analysisInfo, confirmationData, progress, onConfirm, onCancel,
 }: ChatMessageProps) => {
   const [copied, setCopied] = useState(false);
 
@@ -639,18 +635,17 @@ const ChatMessage = ({
   if (type === 'user') {
     return (
       <div className="px-6" data-testid="user-message">
-        <div className="flex justify-end gap-3 mb-6">
-          <div className="flex-1 max-w-xl">
-            <Card className="bg-muted border-border inline-block float-right">
+        <div className="flex justify-end gap-3 mb-6 items-start">
+          <div className="max-w-xl">
+            <Card className="bg-muted border-border inline-block">
               <CardContent className="p-3">
                 <p className="text-foreground text-base leading-relaxed">{content}</p>
               </CardContent>
             </Card>
           </div>
-          <Avatar className="h-10 w-10 border-2 border-primary flex-shrink-0">
-            <AvatarImage src={user?.picture} alt={user?.name || user?.email} />
-            <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-              {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+          <Avatar className="w-8 h-8 flex-shrink-0">
+            <AvatarFallback className="bg-muted text-muted-foreground">
+              <User className="w-4 h-4" />
             </AvatarFallback>
           </Avatar>
         </div>

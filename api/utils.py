@@ -69,7 +69,9 @@ def create_combined_description(  # pylint: disable=too-many-locals
         table_prop = table_prop.copy()
         table_prop.pop("col_descriptions", None)
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system",
+             "content": system_prompt
+            },
             {
                 "role": "user",
                 "content": user_prompt_template.format(
@@ -107,7 +109,7 @@ def generate_db_description(
     db_name: str,
     table_names: List[str],
     temperature: float = 0.5,
-    max_tokens: int = 150,
+    max_tokens: int = 500,
 ) -> str:
     """
     Generates a short and concise description of a database.
@@ -143,15 +145,28 @@ def generate_db_description(
         tables_formatted = ", ".join(table_names[:-1]) + f", and {table_names[-1]}"
 
     prompt = (
-        f"You are a helpful assistant. Generate a concise description of "
-        f"the database named '{db_name}' which contains the following tables: "
-        f"{tables_formatted}.\n\nDescription:"
+        f"Generate a database description for '{db_name}' using ONLY these tables: "
+        f"{tables_formatted}.\n\n"
+        "Output format (plain text):\n"
+        "1) Overview: 2-4 sentences describing the database domain and primary purpose.\n"
+        "2) Tables:\n"
+        "- One bullet per table from the provided list.\n"
+        "- Format: <table_name>: <short functional description>.\n"
+        "- Include every table exactly once.\n"
+        "- If table purpose is unclear from name, provide a neutral generic description.\n"
+        "- Do not invent columns or relationships.\n"
     )
 
     response = completion(
         model=Config.COMPLETION_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            {
+                "role": "system",
+                "content": (
+                    "You are a senior data architect. "
+                    "Write clear, structured database documentation."
+                ),
+            },
             {"role": "user", "content": prompt},
         ],
         temperature=temperature,
@@ -159,5 +174,7 @@ def generate_db_description(
         n=1,
         stop=None,
     )
+    # print("Utils: generate_db_description response", response)
     description = response.choices[0].message["content"]
+    print("Utils: generate_db_description description", description)
     return description

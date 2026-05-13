@@ -27,14 +27,19 @@ ENV PYTHONUNBUFFERED=1 \
 
 USER root
 
+# Install OS packages on a clean FalkorDB base *before* layering bookworm Python from
+# python:3.12-bookworm; copying /usr/local first can break apt (unmet deps on Render, etc.).
+RUN apt-get update \
+    && apt-get install -f -y \
+    && apt-get install -y --no-install-recommends \
+        netcat-openbsd \
+        ca-certificates \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=python-base /usr/local /usr/local
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    netcat-openbsd \
-    ca-certificates \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/local/bin/python3.12 /usr/bin/python3 \
+RUN ln -sf /usr/local/bin/python3.12 /usr/bin/python3 \
     && ln -sf /usr/local/bin/python3.12 /usr/bin/python
 
 WORKDIR /app

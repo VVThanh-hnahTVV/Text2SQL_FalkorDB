@@ -1,13 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle } from "lucide-react";
+import { Modal, Button, Space, Typography } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 
 interface DeleteDatabaseModalProps {
   open: boolean;
@@ -30,61 +22,47 @@ const DeleteDatabaseModal = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
-        className="sm:max-w-md bg-card border-border text-foreground"
-        data-testid="delete-database-modal"
-      >
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-red-500">
-            <AlertTriangle className="h-5 w-5" />
-            Delete Database
-          </DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            {isDemo ? (
-              <div className="space-y-2">
-                <p className="font-semibold">Demo databases cannot be deleted.</p>
-                <p className="text-sm">
-                  Demo databases are read-only and shared across all users.
-                  Only databases you've created can be deleted.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="font-semibold">
-                  Are you sure you want to delete "{databaseName}"?
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  This action cannot be undone. All data and schema information
-                  for this database will be permanently removed.
-                </p>
-              </div>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="bg-card border-border text-muted-foreground hover:bg-muted"
-            data-testid="delete-modal-cancel"
-          >
-            Cancel
+    <Modal
+      open={open}
+      onCancel={() => onOpenChange(false)}
+      footer={null}
+      data-testid="delete-database-modal"
+      title={
+        <Space>
+          <ExclamationCircleOutlined style={{ color: "#ba1a1a" }} />
+          <span>Delete database</span>
+        </Space>
+      }
+    >
+      {isDemo ? (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Typography.Text strong>Demo databases cannot be deleted.</Typography.Text>
+          <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+            Demo databases are read-only and shared across all users. Only databases you have created can be deleted.
+          </Typography.Paragraph>
+          <Button type="primary" onClick={() => onOpenChange(false)} data-testid="delete-modal-cancel">
+            OK
           </Button>
-          {!isDemo && (
-            <Button
-              variant="destructive"
-              onClick={handleConfirm}
-              className="bg-red-600 hover:bg-red-700 text-white"
-              data-testid="delete-modal-confirm"
-            >
-              Delete Database
+        </Space>
+      ) : (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Typography.Paragraph style={{ margin: 0 }}>
+            Are you sure you want to delete <Typography.Text strong>&quot;{databaseName}&quot;</Typography.Text>?
+          </Typography.Paragraph>
+          <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+            This action cannot be undone. All data and schema information for this database will be permanently removed.
+          </Typography.Paragraph>
+          <Space>
+            <Button onClick={() => onOpenChange(false)} data-testid="delete-modal-cancel">
+              Cancel
             </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button type="primary" danger onClick={handleConfirm} data-testid="delete-modal-confirm">
+              Delete database
+            </Button>
+          </Space>
+        </Space>
+      )}
+    </Modal>
   );
 };
 

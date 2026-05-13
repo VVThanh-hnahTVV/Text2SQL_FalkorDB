@@ -1,18 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Database, Search, Code, MessageSquare, AlertTriangle, Copy, Check, User } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
+  Avatar,
+  Button,
+  Card,
+  Flex,
+  Progress,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import {
+  UserOutlined,
+  DatabaseOutlined,
+  CodeOutlined,
+  MessageOutlined,
+  SearchOutlined,
+  ExclamationCircleOutlined,
+  CopyOutlined,
+  CheckOutlined,
+} from '@ant-design/icons';
 import G2Chart from './G2Chart';
 import {
   adviceTypeToBuilderType,
@@ -220,23 +228,20 @@ const ColumnSelect = ({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) => (
-  <div className="space-y-1.5 min-w-0 flex-1">
-    <Label htmlFor={id} className="text-xs text-muted-foreground">
+  <Flex vertical gap={6} style={{ minWidth: 0, flex: 1 }}>
+    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
       {label}
-    </Label>
-    <Select value={value || columns[0]} onValueChange={onChange} disabled={disabled || columns.length === 0}>
-      <SelectTrigger id={id} className="h-9 text-sm">
-        <SelectValue placeholder="Chọn cột" />
-      </SelectTrigger>
-      <SelectContent>
-        {columns.map((col) => (
-          <SelectItem key={col} value={col}>
-            {col}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
+    </Typography.Text>
+    <Select
+      id={id}
+      value={value || columns[0]}
+      onChange={onChange}
+      disabled={disabled || columns.length === 0}
+      size="small"
+      options={columns.map((col) => ({ value: col, label: col }))}
+      style={{ width: '100%' }}
+    />
+  </Flex>
 );
 
 /** Column picker with explicit &quot;Không&quot; for optional channels (color, size, box X). */
@@ -255,28 +260,23 @@ const OptionalColumnSelect = ({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) => (
-  <div className="space-y-1.5 min-w-0 flex-1">
-    <Label htmlFor={id} className="text-xs text-muted-foreground">
+  <Flex vertical gap={6} style={{ minWidth: 0, flex: 1 }}>
+    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
       {label}
-    </Label>
+    </Typography.Text>
     <Select
+      id={id}
       value={value ? value : OPTIONAL_NONE_VALUE}
-      onValueChange={(v) => onChange(v === OPTIONAL_NONE_VALUE ? '' : v)}
+      onChange={(v) => onChange(v === OPTIONAL_NONE_VALUE ? '' : v)}
       disabled={disabled || columns.length === 0}
-    >
-      <SelectTrigger id={id} className="h-9 text-sm">
-        <SelectValue placeholder="Không" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={OPTIONAL_NONE_VALUE}>Không</SelectItem>
-        {columns.map((col) => (
-          <SelectItem key={col} value={col}>
-            {col}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
+      size="small"
+      options={[
+        { value: OPTIONAL_NONE_VALUE, label: 'Không' },
+        ...columns.map((col) => ({ value: col, label: col })),
+      ]}
+      style={{ width: '100%' }}
+    />
+  </Flex>
 );
 
 const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps) => {
@@ -331,216 +331,221 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <Database className="w-4 h-4 text-success" />
-        <span className="text-base font-semibold text-success">Query Results</span>
+      <Flex align="center" gap={8} wrap="wrap" style={{ marginBottom: 12 }}>
+        <DatabaseOutlined style={{ color: "#006e1c", fontSize: 16 }} />
+        <Typography.Text strong style={{ color: "#006e1c" }}>
+          Query Results
+        </Typography.Text>
         {shouldVisualize && headerChartBadge ? (
-          <Badge variant="secondary" className="text-xs uppercase" data-testid="query-results-chart-type-badge">
-            {headerChartBadge}
-            {!applied && <span className="sr-only"> (mặc định)</span>}
-          </Badge>
+          <Tag data-testid="query-results-chart-type-badge">{headerChartBadge}</Tag>
         ) : null}
-        <Badge variant="outline" className="ml-auto text-sm">
-          {queryData?.length || 0} rows
-        </Badge>
-      </div>
+        <Tag style={{ marginLeft: "auto" }}>{queryData?.length || 0} rows</Tag>
+      </Flex>
 
       {shouldVisualize && columns.length > 0 ? (
-        <div className="mb-4 space-y-3 rounded-md border border-border bg-muted/30 p-3" data-testid="query-results-chart-builder">
-          <p className="text-xs text-muted-foreground">
-            Giá trị mặc định gợi ý bởi AntV AVA. Chỉnh trục và loại biểu đồ, rồi bấm <span className="font-medium text-foreground">Tạo biểu đồ</span>.
-          </p>
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="space-y-1.5 w-full sm:w-44 sm:flex-none">
-              <Label className="text-xs text-muted-foreground">Loại biểu đồ</Label>
-              <Select
-                value={draft.chartType}
-                onValueChange={(v) => setDraft((d) => ({ ...d, chartType: v }))}
-              >
-                <SelectTrigger className="h-9 text-sm" data-testid="chart-type-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CHART_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {['line', 'bar', 'scatter'].includes(draft.chartType) ? (
-              <>
-                <ColumnSelect
-                  id="chart-x"
-                  label="Trục X"
-                  value={draft.x}
-                  columns={columns}
-                  onChange={(x) => setDraft((d) => ({ ...d, x }))}
-                />
-                <ColumnSelect
-                  id="chart-y"
-                  label="Trục Y"
-                  value={draft.y}
-                  columns={columns}
-                  onChange={(y) => setDraft((d) => ({ ...d, y }))}
-                />
-                <OptionalColumnSelect
-                  id="chart-color"
-                  label="Màu / nhóm (color)"
-                  value={draft.color}
-                  columns={columns}
-                  onChange={(color) => setDraft((d) => ({ ...d, color }))}
-                />
-              </>
-            ) : null}
-
-            {draft.chartType === 'bar' && draft.color ? (
-              <div className="space-y-1.5 w-full sm:w-40 sm:flex-none">
-                <Label className="text-xs text-muted-foreground">Kiểu cột</Label>
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            borderRadius: 8,
+            border: "1px solid #e0e3e6",
+            background: "rgba(63, 81, 181, 0.04)",
+          }}
+          data-testid="query-results-chart-builder"
+        >
+          <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+            Giá trị mặc định gợi ý bởi AntV AVA. Chỉnh trục và loại biểu đồ, rồi bấm{" "}
+            <Typography.Text strong>Tạo biểu đồ</Typography.Text>.
+          </Typography.Paragraph>
+          <Flex vertical gap={12} style={{ width: "100%" }}>
+            <Flex gap={12} wrap="wrap" align="flex-end">
+              <Flex vertical gap={6} style={{ width: "100%", maxWidth: 200 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Loại biểu đồ
+                </Typography.Text>
                 <Select
-                  value={draft.barLayout}
-                  onValueChange={(v) =>
-                    setDraft((d) => ({ ...d, barLayout: v as 'grouped' | 'stacked' }))
-                  }
-                >
-                  <SelectTrigger className="h-9 text-sm" data-testid="chart-bar-layout-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="grouped">Nhóm cột</SelectItem>
-                    <SelectItem value="stacked">Chồng</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            {draft.chartType === 'scatter' ? (
-              <OptionalColumnSelect
-                id="chart-size"
-                label="Kích thước (size)"
-                value={draft.size}
-                columns={columns}
-                onChange={(size) => setDraft((d) => ({ ...d, size }))}
-              />
-            ) : null}
-
-            {draft.chartType === 'pie' ? (
-              <>
-                <ColumnSelect
-                  id="chart-labels"
-                  label="Nhãn (labels)"
-                  value={draft.labels}
-                  columns={columns}
-                  onChange={(labels) => setDraft((d) => ({ ...d, labels }))}
+                  value={draft.chartType}
+                  onChange={(v) => setDraft((d) => ({ ...d, chartType: v }))}
+                  size="small"
+                  data-testid="chart-type-select"
+                  options={CHART_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  style={{ width: "100%" }}
                 />
-                <ColumnSelect
-                  id="chart-values"
-                  label="Giá trị (values)"
-                  value={draft.values}
-                  columns={columns}
-                  onChange={(values) => setDraft((d) => ({ ...d, values }))}
-                />
-              </>
-            ) : null}
+              </Flex>
 
-            {draft.chartType === 'histogram' ? (
-              <ColumnSelect
-                id="chart-hist-x"
-                label="Cột (trục X)"
-                value={draft.x}
-                columns={columns}
-                onChange={(x) => setDraft((d) => ({ ...d, x }))}
-              />
-            ) : null}
+              {["line", "bar", "scatter"].includes(draft.chartType) ? (
+                <>
+                  <ColumnSelect
+                    id="chart-x"
+                    label="Trục X"
+                    value={draft.x}
+                    columns={columns}
+                    onChange={(x) => setDraft((d) => ({ ...d, x }))}
+                  />
+                  <ColumnSelect
+                    id="chart-y"
+                    label="Trục Y"
+                    value={draft.y}
+                    columns={columns}
+                    onChange={(y) => setDraft((d) => ({ ...d, y }))}
+                  />
+                  <OptionalColumnSelect
+                    id="chart-color"
+                    label="Màu / nhóm (color)"
+                    value={draft.color}
+                    columns={columns}
+                    onChange={(color) => setDraft((d) => ({ ...d, color }))}
+                  />
+                </>
+              ) : null}
 
-            {draft.chartType === 'box' ? (
-              <>
+              {draft.chartType === "bar" && draft.color ? (
+                <Flex vertical gap={6} style={{ width: "100%", maxWidth: 160 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    Kiểu cột
+                  </Typography.Text>
+                  <Select
+                    value={draft.barLayout}
+                    onChange={(v) => setDraft((d) => ({ ...d, barLayout: v as "grouped" | "stacked" }))}
+                    size="small"
+                    data-testid="chart-bar-layout-select"
+                    options={[
+                      { value: "grouped", label: "Nhóm cột" },
+                      { value: "stacked", label: "Chồng" },
+                    ]}
+                    style={{ width: "100%" }}
+                  />
+                </Flex>
+              ) : null}
+
+              {draft.chartType === "scatter" ? (
                 <OptionalColumnSelect
-                  id="chart-box-x"
-                  label="Phân loại (X, tuỳ chọn)"
+                  id="chart-size"
+                  label="Kích thước (size)"
+                  value={draft.size}
+                  columns={columns}
+                  onChange={(size) => setDraft((d) => ({ ...d, size }))}
+                />
+              ) : null}
+
+              {draft.chartType === "pie" ? (
+                <>
+                  <ColumnSelect
+                    id="chart-labels"
+                    label="Nhãn (labels)"
+                    value={draft.labels}
+                    columns={columns}
+                    onChange={(labels) => setDraft((d) => ({ ...d, labels }))}
+                  />
+                  <ColumnSelect
+                    id="chart-values"
+                    label="Giá trị (values)"
+                    value={draft.values}
+                    columns={columns}
+                    onChange={(values) => setDraft((d) => ({ ...d, values }))}
+                  />
+                </>
+              ) : null}
+
+              {draft.chartType === "histogram" ? (
+                <ColumnSelect
+                  id="chart-hist-x"
+                  label="Cột (trục X)"
                   value={draft.x}
                   columns={columns}
                   onChange={(x) => setDraft((d) => ({ ...d, x }))}
                 />
-                <ColumnSelect
-                  id="chart-box-y"
-                  label="Giá trị (Y)"
-                  value={draft.y}
-                  columns={columns}
-                  onChange={(y) => setDraft((d) => ({ ...d, y }))}
-                />
-              </>
-            ) : null}
+              ) : null}
 
-            <Button
-              type="button"
-              size="sm"
-              className="sm:self-end shrink-0"
-              onClick={handleCreateChart}
-              disabled={!canApply}
-              data-testid="query-results-create-chart"
-            >
-              Tạo biểu đồ
-            </Button>
-          </div>
-          {!canApply && draft.chartType !== 'table' ? (
-            <p className="text-xs text-destructive">Chọn đủ cột hợp lệ cho loại biểu đồ này.</p>
+              {draft.chartType === "box" ? (
+                <>
+                  <OptionalColumnSelect
+                    id="chart-box-x"
+                    label="Phân loại (X, tuỳ chọn)"
+                    value={draft.x}
+                    columns={columns}
+                    onChange={(x) => setDraft((d) => ({ ...d, x }))}
+                  />
+                  <ColumnSelect
+                    id="chart-box-y"
+                    label="Giá trị (Y)"
+                    value={draft.y}
+                    columns={columns}
+                    onChange={(y) => setDraft((d) => ({ ...d, y }))}
+                  />
+                </>
+              ) : null}
+
+              <Button
+                type="primary"
+                size="small"
+                style={{ alignSelf: "flex-end" }}
+                onClick={handleCreateChart}
+                disabled={!canApply}
+                data-testid="query-results-create-chart"
+              >
+                Tạo biểu đồ
+              </Button>
+            </Flex>
+          </Flex>
+          {!canApply && draft.chartType !== "table" ? (
+            <Typography.Text type="danger" style={{ fontSize: 12 }}>
+              Chọn đủ cột hợp lệ cho loại biểu đồ này.
+            </Typography.Text>
           ) : null}
         </div>
       ) : null}
 
       {chartSpec ? (
-        <div className="mb-4 max-w-full -mx-4 px-4">
+        <div style={{ marginBottom: 16, maxWidth: "100%" }}>
           <div
-            className="overflow-hidden rounded border border-border bg-card p-2"
+            style={{
+              overflow: "hidden",
+              borderRadius: 8,
+              border: "1px solid #e0e3e6",
+              background: "#fff",
+              padding: 8,
+            }}
             data-testid="query-results-plot"
           >
             <G2Chart spec={chartSpec} height={380} />
           </div>
         </div>
       ) : shouldVisualize ? (
-        <p className="text-sm text-muted-foreground mb-4" data-testid="query-results-chart-placeholder">
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }} data-testid="query-results-chart-placeholder">
           Chưa có biểu đồ. Chọn cấu hình và bấm &quot;Tạo biểu đồ&quot;.
-        </p>
+        </Typography.Paragraph>
       ) : null}
 
-      <div className={chartSpec ? '' : 'mt-0'}>
+      <div>
         <QueryResultsTable queryData={queryData} />
       </div>
     </>
   );
 };
 
-const QueryResultsTable = ({ queryData }: { queryData: any[] }) => (
-  <div className="max-w-full overflow-hidden -mx-4 px-4">
-    <div className="overflow-x-auto overflow-y-auto max-h-96 border border-border rounded scrollbar-visible" style={{ maxWidth: '100%' }}>
-      <table className="text-sm border-collapse" data-testid="results-table" style={{ width: '100%', maxWidth: '100%', tableLayout: 'auto', display: 'table' }}>
-        <thead className="sticky top-0 bg-card z-10">
-          <tr className="border-b border-border">
-            {Object.keys(queryData[0]).map((column) => (
-              <th key={column} className="text-left px-3 py-2 text-muted-foreground font-semibold bg-card break-words" style={{ maxWidth: '300px', minWidth: '100px' }}>
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {queryData.map((row, index) => (
-            <tr key={index} className="border-b border-border hover:bg-muted">
-              {Object.values(row).map((value: any, cellIndex) => (
-                <td key={cellIndex} className="px-3 py-2 text-foreground break-words" style={{ maxWidth: '300px', minWidth: '100px' }}>
-                  {String(value)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+const QueryResultsTable = ({ queryData }: { queryData: any[] }) => {
+  const keys = Object.keys(queryData[0] || {});
+  const columns = keys.map((k) => ({
+    title: k,
+    dataIndex: k,
+    key: k,
+    ellipsis: true,
+  }));
+  return (
+    <div style={{ maxWidth: "100%", overflow: "hidden" }}>
+      <Table
+        size="small"
+        data-testid="results-table"
+        dataSource={queryData.map((row, i) => ({ ...row, key: i }))}
+        columns={columns}
+        pagination={false}
+        scroll={{ x: "max-content", y: 360 }}
+        style={{ border: "1px solid #e0e3e6", borderRadius: 8 }}
+      />
     </div>
-  </div>
-);
+  );
+};
 
 const ChatMessage = ({
   type, content, steps, queryData, visualizationData, analysisInfo, confirmationData, progress, onConfirm, onCancel,
@@ -557,264 +562,291 @@ const ChatMessage = ({
     }
   };
 
-  if (type === 'confirmation') {
-    const operationType = (confirmationData?.operationType ?? 'UNKNOWN').toUpperCase();
-    const isHighRisk = ['DELETE', 'DROP', 'TRUNCATE'].includes(operationType);
+  if (type === "confirmation") {
+    const operationType = (confirmationData?.operationType ?? "UNKNOWN").toUpperCase();
+    const isHighRisk = ["DELETE", "DROP", "TRUNCATE"].includes(operationType);
 
     return (
-      <div className="px-6" data-testid="confirmation-message">
-        <div className="flex gap-3 mb-6 items-start">
-          <Avatar className="w-8 h-8 flex-shrink-0">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-              QW
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <Card className={`${isHighRisk ? 'border-error/50 bg-error/5' : 'border-warning/50 bg-warning/5'}`}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle className={`w-5 h-5 ${isHighRisk ? 'text-error' : 'text-warning'}`} />
-                  <span className={`text-base font-semibold ${isHighRisk ? 'text-error' : 'text-warning'}`}>
-                    Destructive Operation Detected
-                  </span>
+      <div style={{ padding: "0 24px" }} data-testid="confirmation-message">
+        <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Card
+              style={{
+                borderColor: isHighRisk ? "#fecaca" : "#fde68a",
+                background: isHighRisk ? "#fff1f2" : "#fffbeb",
+              }}
+              styles={{ body: { padding: 16 } }}
+            >
+              <Flex align="center" gap={8} style={{ marginBottom: 12 }}>
+                <ExclamationCircleOutlined style={{ color: isHighRisk ? "#ba1a1a" : "#b45309", fontSize: 20 }} />
+                <Typography.Text strong style={{ color: isHighRisk ? "#ba1a1a" : "#b45309" }}>
+                  Destructive operation detected
+                </Typography.Text>
+              </Flex>
+
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <div>
+                  <Typography.Paragraph style={{ marginBottom: 8 }}>
+                    This operation will perform a{" "}
+                    <Typography.Text strong type={isHighRisk ? "danger" : "warning"}>
+                      {operationType}
+                    </Typography.Text>{" "}
+                    query:
+                  </Typography.Paragraph>
+                  {confirmationData?.sqlQuery && (
+                    <div
+                      style={{
+                        background: "#f8fafc",
+                        border: "1px solid #e0e3e6",
+                        borderRadius: 8,
+                        padding: 12,
+                        overflowX: "auto",
+                      }}
+                    >
+                      <pre style={{ margin: 0, fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap" }}>
+                        <code>{confirmationData.sqlQuery}</code>
+                      </pre>
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-foreground text-sm mb-2">
-                      This operation will perform a <span className={`font-semibold ${isHighRisk ? 'text-error' : 'text-warning'}`}>{operationType}</span> query:
-                    </p>
-                    {confirmationData?.sqlQuery && (
-                      <div className="bg-background border border-border rounded p-3 overflow-x-auto">
-                        <pre className="text-sm font-mono text-foreground whitespace-pre-wrap break-words overflow-wrap-anywhere">
-                          <code className="language-sql">{confirmationData.sqlQuery}</code>
-                        </pre>
-                      </div>
+                <div
+                  style={{
+                    border: `1px solid ${isHighRisk ? "#fecaca" : "#fde68a"}`,
+                    borderRadius: 8,
+                    padding: 12,
+                    background: isHighRisk ? "#fff1f2" : "#fffbeb",
+                  }}
+                >
+                  <Typography.Text style={{ fontSize: 13 }}>
+                    {isHighRisk ? (
+                      <>
+                        <Typography.Text strong type="danger">
+                          Warning:
+                        </Typography.Text>{" "}
+                        This operation may be irreversible and will permanently modify your database.
+                      </>
+                    ) : (
+                      <>This operation will make changes to your database. Please review carefully before confirming.</>
                     )}
-                  </div>
-
-                  <div className={`${isHighRisk ? 'bg-error/10 border-error/50' : 'bg-warning/10 border-warning/50'} border rounded p-3`}>
-                    <p className="text-sm text-foreground">
-                      {isHighRisk ? (
-                        <>
-                          <span className="font-semibold text-error">⚠️ WARNING:</span> This operation may be irreversible and will permanently modify your database.
-                        </>
-                      ) : (
-                        <>This operation will make changes to your database. Please review carefully before confirming.</>
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      onClick={onCancel}
-                      className="flex-1 bg-card border-border text-muted-foreground hover:bg-muted"
-                      data-testid="confirmation-cancel-button"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={onConfirm}
-                      className={`flex-1 ${isHighRisk ? 'bg-error hover:bg-error/90' : 'bg-warning hover:bg-warning/90'} text-white font-semibold`}
-                      data-testid="confirmation-confirm-button"
-                    >
-                      Confirm {operationType}
-                    </Button>
-                  </div>
+                  </Typography.Text>
                 </div>
-              </CardContent>
+
+                <Flex gap={8} style={{ paddingTop: 8 }}>
+                  <Button block onClick={onCancel} data-testid="confirmation-cancel-button">
+                    Cancel
+                  </Button>
+                  <Button
+                    block
+                    danger={isHighRisk}
+                    type="primary"
+                    onClick={onConfirm}
+                    data-testid="confirmation-confirm-button"
+                    style={!isHighRisk ? { background: "#b45309", borderColor: "#b45309" } : undefined}
+                  >
+                    Confirm {operationType}
+                  </Button>
+                </Flex>
+              </Space>
             </Card>
           </div>
-        </div>
+        </Flex>
       </div>
     );
   }
 
-  if (type === 'user') {
+  if (type === "user") {
     return (
-      <div className="px-6" data-testid="user-message">
-        <div className="flex justify-end gap-3 mb-6 items-start">
-          <div className="max-w-xl">
-            <Card className="bg-muted border-border inline-block">
-              <CardContent className="p-3">
-                <p className="text-foreground text-base leading-relaxed">{content}</p>
-              </CardContent>
-            </Card>
-          </div>
-          <Avatar className="w-8 h-8 flex-shrink-0">
-            <AvatarFallback className="bg-muted text-muted-foreground">
-              <User className="w-4 h-4" />
-            </AvatarFallback>
-          </Avatar>
-        </div>
+      <div style={{ padding: "0 24px" }} data-testid="user-message">
+        <Flex justify="flex-end" gap={12} align="start" style={{ marginBottom: 24 }}>
+          <Card
+            style={{
+              maxWidth: 560,
+              background: "rgba(222, 224, 255, 0.45)",
+              borderColor: "rgba(63, 81, 181, 0.15)",
+              borderRadius: 16,
+            }}
+            styles={{ body: { padding: "12px 16px" } }}
+          >
+            <Typography.Paragraph style={{ margin: 0, fontSize: 15, fontWeight: 500, color: "#1a1c1e" }}>
+              {content}
+            </Typography.Paragraph>
+          </Card>
+          <Avatar style={{ background: "#e8eaed", color: "#475569", flexShrink: 0 }} icon={<UserOutlined />} />
+        </Flex>
       </div>
     );
   }
 
-  if (type === 'sql-query') {
+  if (type === "sql-query") {
     const hasSQL = content && content.trim().length > 0;
-    const isValid = analysisInfo?.isValid !== false; // Default to true if not specified
+    const isValid = analysisInfo?.isValid !== false;
 
     return (
-      <div className="px-6" data-testid="sql-query-message">
-        <div className="flex gap-3 mb-6 items-start">
-          <Avatar className="w-8 h-8 flex-shrink-0">
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-                QW
-              </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-          <Card className={`bg-card ${isValid ? 'border-primary/30' : 'border-warning/30'}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Code className={`w-4 h-4 ${isValid ? 'text-primary' : 'text-warning'}`} />
-                <span className={`text-base font-semibold ${isValid ? 'text-primary' : 'text-warning'}`}>
-                  {hasSQL ? 'Generated SQL Query' : 'Query Analysis'}
-                </span>
-              </div>
+      <div style={{ padding: "0 24px" }} data-testid="sql-query-message">
+        <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Card
+              styles={{ body: { padding: 0 } }}
+              style={{
+                borderColor: isValid ? "rgba(63, 81, 181, 0.25)" : "#fde68a",
+                overflow: "hidden",
+              }}
+            >
+              <Flex align="center" gap={8} style={{ padding: "12px 16px", borderBottom: "1px solid #e0e3e6" }}>
+                <CodeOutlined style={{ color: isValid ? "#3f51b5" : "#b45309" }} />
+                <Typography.Text strong style={{ color: isValid ? "#24389c" : "#b45309" }}>
+                  {hasSQL ? "Generated SQL" : "Query analysis"}
+                </Typography.Text>
+              </Flex>
 
               {hasSQL && (
-                <div className="overflow-x-auto -mx-2 px-2">
-                  <div className="relative">
+                <div style={{ position: "relative", background: "#1a1c1e", color: "#e5e7eb" }}>
+                  <Flex
+                    justify="space-between"
+                    align="center"
+                    style={{ padding: "8px 16px", background: "#1e293b", borderBottom: "1px solid #334155" }}
+                  >
+                    <Typography.Text style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#94a3b8" }}>
+                      SQL
+                    </Typography.Text>
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopyQuery}
-                      className="absolute top-2 right-2 z-10 h-8 w-8 p-0 hover:bg-muted"
-                      title={copied ? "Copied!" : "Copy query"}
+                      type="text"
+                      size="small"
+                      icon={copied ? <CheckOutlined style={{ color: "#94f990" }} /> : <CopyOutlined />}
+                      onClick={() => void handleCopyQuery()}
+                      style={{ color: "#bac3ff", fontSize: 11, fontWeight: 700 }}
                     >
-                      {copied ? (
-                        <Check className="w-4 h-4 text-success" />
-                      ) : (
-                        <Copy className="w-4 h-4 text-muted-foreground" />
-                      )}
+                      COPY
                     </Button>
-                    <pre className="bg-background text-foreground p-3 rounded text-sm mb-3 w-fit min-w-full font-mono whitespace-pre-wrap break-words overflow-wrap-anywhere">
-                      <code className="language-sql">{content}</code>
-                    </pre>
-                  </div>
+                  </Flex>
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: 20,
+                      fontSize: 12,
+                      fontFamily: "JetBrains Mono, Consolas, monospace",
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    <code style={{ color: "#e5e7eb" }}>{content}</code>
+                  </pre>
                 </div>
               )}
 
               {!isValid && (
-                <div className="space-y-2 text-sm">
-                  {analysisInfo?.explanation && (
-                    <div className="bg-background/50 p-2 rounded">
-                      <span className="font-semibold text-warning">Explanation:</span>
-                      <p className="text-foreground mt-1">{analysisInfo.explanation}</p>
-                    </div>
-                  )}
-                  {analysisInfo?.missing && (
-                    <div className="bg-background/50 p-2 rounded">
-                      <span className="font-semibold text-warning">Missing Information:</span>
-                      <p className="text-foreground mt-1">{analysisInfo.missing}</p>
-                    </div>
-                  )}
-                  {analysisInfo?.ambiguities && (
-                    <div className="bg-background/50 p-2 rounded">
-                      <span className="font-semibold text-warning">Ambiguities:</span>
-                      <p className="text-foreground mt-1">{analysisInfo.ambiguities}</p>
-                    </div>
-                  )}
+                <div style={{ padding: 16 }}>
+                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                    {analysisInfo?.explanation && (
+                      <Typography.Paragraph type="warning" style={{ margin: 0 }}>
+                        <strong>Explanation:</strong> {analysisInfo.explanation}
+                      </Typography.Paragraph>
+                    )}
+                    {analysisInfo?.missing && (
+                      <Typography.Paragraph type="warning" style={{ margin: 0 }}>
+                        <strong>Missing:</strong> {analysisInfo.missing}
+                      </Typography.Paragraph>
+                    )}
+                    {analysisInfo?.ambiguities && (
+                      <Typography.Paragraph type="warning" style={{ margin: 0 }}>
+                        <strong>Ambiguities:</strong> {analysisInfo.ambiguities}
+                      </Typography.Paragraph>
+                    )}
+                  </Space>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </Card>
+          </div>
+        </Flex>
       </div>
     );
   }
 
-  if (type === 'query-result') {
+  if (type === "query-result") {
     return (
-      <div className="px-6" data-testid="query-results-message">
-        <div className="flex gap-3 mb-6 items-start">
-          <Avatar className="w-8 h-8 flex-shrink-0">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-              QW
-            </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0 max-w-full overflow-hidden">
-          <Card className="bg-card border-success/30 max-w-full">
-            <CardContent className="p-4 max-w-full overflow-hidden">
+      <div style={{ padding: "0 24px" }} data-testid="query-results-message">
+        <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <div style={{ flex: 1, minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
+            <Card styles={{ body: { padding: 16 } }} style={{ borderColor: "rgba(0, 110, 28, 0.25)", maxWidth: "100%" }}>
               {queryData && queryData.length > 0 ? (
                 <QueryResultBody queryData={queryData} visualizationData={visualizationData} />
               ) : (
-                <>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Database className="w-4 h-4 text-success" />
-                    <span className="text-base font-semibold text-success">Query Results</span>
-                    <Badge variant="outline" className="ml-auto text-sm">
-                      0 rows
-                    </Badge>
-                  </div>
-                </>
+                <Flex align="center" gap={8} style={{ marginBottom: 12 }}>
+                  <DatabaseOutlined style={{ color: "#006e1c", fontSize: 16 }} />
+                  <Typography.Text strong style={{ color: "#006e1c" }}>
+                    Query Results
+                  </Typography.Text>
+                  <Tag style={{ marginLeft: "auto" }}>0 rows</Tag>
+                </Flex>
               )}
-            </CardContent>
-          </Card>
-        </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (type === 'ai') {
-    return (
-      <div className="px-6" data-testid="ai-message">
-        <div className="flex gap-3 mb-6 items-start">
-          <Avatar className="w-8 h-8 flex-shrink-0">
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-                QW
-              </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="text-foreground text-base leading-relaxed whitespace-pre-line">
-              {content}
-            </div>
+            </Card>
           </div>
-        </div>
+        </Flex>
       </div>
     );
   }
 
-  if (type === 'ai-steps') {
+  if (type === "ai") {
     return (
-      <div className="px-6">
-      <div className="flex gap-3 mb-6 items-start">
-        <Avatar className="w-8 h-8 flex-shrink-0">
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-            QW
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0">
-          <Card className="bg-card border-primary/30 max-w-md">
-            <CardContent className="p-4">
-              <div className="space-y-3">
+      <div style={{ padding: "0 24px" }} data-testid="ai-message">
+        <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <div style={{ flex: 1, minWidth: 0, borderLeft: "4px solid #3f51b5", paddingLeft: 16 }}>
+            <Typography.Paragraph style={{ margin: 0, fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-line" }}>
+              {content}
+            </Typography.Paragraph>
+          </div>
+        </Flex>
+      </div>
+    );
+  }
+
+  if (type === "ai-steps") {
+    return (
+      <div style={{ padding: "0 24px" }}>
+        <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <div style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
+            <Card styles={{ body: { padding: 16 } }} style={{ borderColor: "rgba(63, 81, 181, 0.25)" }}>
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 {steps?.map((step, index) => (
-                  <div key={index} className="flex items-center gap-3 text-sm text-foreground">
-                    <Badge variant="outline" className="p-1 w-6 h-6 flex items-center justify-center border-primary">
-                      {step.icon === 'search' && <Search className="w-3 h-3 text-primary" />}
-                      {step.icon === 'database' && <Database className="w-3 h-3 text-primary" />}
-                      {step.icon === 'code' && <Code className="w-3 h-3 text-primary" />}
-                      {step.icon === 'message' && <MessageSquare className="w-3 h-3 text-primary" />}
-                    </Badge>
-                    <span>{step.text}</span>
-                  </div>
+                  <Flex key={index} align="center" gap={12}>
+                    <Tag
+                      style={{
+                        width: 28,
+                        height: 28,
+                        margin: 0,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: 6,
+                      }}
+                    >
+                      {step.icon === "search" && <SearchOutlined />}
+                      {step.icon === "database" && <DatabaseOutlined />}
+                      {step.icon === "code" && <CodeOutlined />}
+                      {step.icon === "message" && <MessageOutlined />}
+                    </Tag>
+                    <Typography.Text style={{ fontSize: 13 }}>{step.text}</Typography.Text>
+                  </Flex>
                 ))}
                 {progress !== undefined && (
-                  <div className="mt-4">
-                    <Progress value={progress} className="h-2" />
-                    <p className="text-xs text-muted-foreground mt-1">{progress}% complete</p>
+                  <div style={{ marginTop: 8 }}>
+                    <Progress percent={progress} size="small" />
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {progress}% complete
+                    </Typography.Text>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              </Space>
+            </Card>
+          </div>
+        </Flex>
       </div>
     );
   }

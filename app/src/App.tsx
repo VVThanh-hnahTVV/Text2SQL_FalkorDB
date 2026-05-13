@@ -1,41 +1,38 @@
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ConfigProvider, App as AntdApp } from "antd";
 import { DatabaseProvider } from "@/contexts/DatabaseContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { architectTheme } from "@/theme/architectTheme";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
+import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <DatabaseProvider>
-      <SettingsProvider>
-        <ChatProvider>
-          <TooltipProvider>
-            {/* relative + absolute Toaster: toasts stay mounted but do not consume flex height (fixes empty main column) */}
-            <div className="relative flex min-h-full w-full flex-1 flex-col overflow-visible">
+  <ConfigProvider theme={architectTheme}>
+    <AntdApp>
+      <QueryClientProvider client={queryClient}>
+        <DatabaseProvider>
+          <SettingsProvider>
+            <ChatProvider>
               <BrowserRouter>
                 <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/settings" element={<Settings />} />
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/history" element={<History />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
               </BrowserRouter>
-              <div className="pointer-events-none absolute inset-0 z-[200]">
-                <Toaster />
-              </div>
-            </div>
-          </TooltipProvider>
-        </ChatProvider>
-      </SettingsProvider>
-    </DatabaseProvider>
-  </QueryClientProvider>
+            </ChatProvider>
+          </SettingsProvider>
+        </DatabaseProvider>
+      </QueryClientProvider>
+    </AntdApp>
+  </ConfigProvider>
 );
 
 export default App;

@@ -32,6 +32,9 @@ demo_tokens.py
 /playwright/.cache/
 /playwright/.auth/
 e2e/.auth/
+# Local persisted query history (hashed filenames per session)
+data/query_history/
+
 # Build artifacts
 clients/python/queryweaver_client.egg-info/
 clients/ts/dist/

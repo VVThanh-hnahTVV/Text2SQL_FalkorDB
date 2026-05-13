@@ -206,17 +206,17 @@ export class HomePage extends BasePage {
     return this.page.getByTestId(`delete-token-btn-${tokenId}`);
   }
 
-  // Toast Elements
+  // Toast Elements — Ant Design message API
   private get toastNotification(): Locator {
-    return this.page.getByTestId("toast-notification");
+    return this.page.locator(".ant-message-notice-content").first();
   }
 
   private get toastTitle(): Locator {
-    return this.page.getByTestId("toast-title");
+    return this.toastNotification;
   }
 
   private get toastDescription(): Locator {
-    return this.page.getByTestId("toast-description");
+    return this.toastNotification;
   }
 
   // Processing Indicator

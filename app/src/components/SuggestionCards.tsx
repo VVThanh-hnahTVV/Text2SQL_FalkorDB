@@ -1,4 +1,4 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, Row, Col, Typography } from "antd";
 
 interface SuggestionCardsProps {
   suggestions: string[];
@@ -8,31 +8,41 @@ interface SuggestionCardsProps {
 
 const SuggestionCards = ({ suggestions, onSelect, disabled = false }: SuggestionCardsProps) => {
   return (
-    <div className="grid gap-2 sm:gap-3 mb-3 sm:mb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
       {suggestions.map((suggestion) => (
-        <Card
-          key={suggestion}
-          className={`bg-card border-border ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-purple-500/50 transition-all duration-200 cursor-pointer'}`}
-          onClick={disabled ? undefined : () => onSelect(suggestion)}
-          role="button"
-          tabIndex={disabled ? -1 : 0}
-          aria-disabled={disabled}
-          onKeyDown={(e) => {
-            if (disabled) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onSelect(suggestion);
-            }
-          }}
-        >
-          <CardContent className="p-2 sm:p-4">
-            <div className="text-muted-foreground text-xs sm:text-sm text-center line-clamp-2">
+        <Col xs={24} sm={12} lg={8} key={suggestion}>
+          <Card
+            size="small"
+            hoverable={!disabled}
+            onClick={disabled ? undefined : () => onSelect(suggestion)}
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            aria-disabled={disabled}
+            onKeyDown={(e) => {
+              if (disabled) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(suggestion);
+              }
+            }}
+            styles={{ body: { padding: 12 } }}
+            style={{
+              opacity: disabled ? 0.5 : 1,
+              cursor: disabled ? "not-allowed" : "pointer",
+              borderColor: "#e0e3e6",
+            }}
+          >
+            <Typography.Paragraph
+              ellipsis={{ rows: 2 }}
+              type="secondary"
+              style={{ margin: 0, textAlign: "center", fontSize: 13 }}
+            >
               {suggestion}
-            </div>
-          </CardContent>
-        </Card>
+            </Typography.Paragraph>
+          </Card>
+        </Col>
       ))}
-    </div>
+    </Row>
   );
 };
 

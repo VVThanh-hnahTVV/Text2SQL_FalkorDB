@@ -137,18 +137,18 @@ class RelevancyAgent(BaseAgent):
         )
 
         # Temporary bypass: always treat as On-topic.
-        # answer = run_completion(
-        #     self.messages, self.custom_model, self.custom_api_key, temperature=0
-        # )
-        # self.messages.append({"role": "assistant", "content": answer})
-        # logger.debug("Relevancy agent answer: %s", answer)
-        # return parse_response(answer)
-        answer = {
-            "status": "On-topic",
-            "reason": "Temporarily bypassed relevancy LLM check.",
-            "suggestions": [],
-        }
-        self.messages.append({"role": "assistant", "content": json.dumps(answer)})
-        logger.debug("Relevancy agent bypass answer: %s", answer)
-        print("Relevancy agent bypass answer: %s", answer)
-        return answer
+        answer = run_completion(
+            self.messages, self.custom_model, self.custom_api_key, temperature=0
+        )
+        self.messages.append({"role": "assistant", "content": answer})
+        logger.debug("Relevancy agent answer: %s", answer)
+        return parse_response(answer)
+        # answer = {
+        #     "status": "On-topic",
+        #     "reason": "Temporarily bypassed relevancy LLM check.",
+        #     "suggestions": [],
+        # }
+        # self.messages.append({"role": "assistant", "content": json.dumps(answer)})
+        # logger.debug("Relevancy agent bypass answer: %s", answer)
+        # print("Relevancy agent bypass answer: %s", answer)
+        # return answer

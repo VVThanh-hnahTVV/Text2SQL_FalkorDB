@@ -1,92 +1,58 @@
-# Multi-stage build: Start with Python 3.12 base
+# =============================================================================
+# QueryWeaver — FastAPI + Vite UI, runtime bundled with FalkorDB
+# Build: docker build -t queryweaver .
+# Run:  docker run --rm -p 5000:5000 -p 6380:6380 -e OPENAI_API_KEY=... queryweaver
+# =============================================================================
+
+# ---- Frontend (Vite 7 needs Node >= 20.19) ----
+FROM node:22-bookworm-slim AS frontend
+WORKDIR /build
+COPY app/package.json app/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY app/ ./
+RUN npm run build
+
+# ---- CPython 3.12 (pyproject: requires-python >=3.12) ----
 FROM python:3.12-bookworm AS python-base
 
-# Main stage: Use FalkorDB base and copy Python 3.12
+# ---- Runtime: FalkorDB + app ----
 FROM falkordb/falkordb:latest
 
 ENV PYTHONUNBUFFERED=1 \
     FALKORDB_HOST=localhost \
-    FALKORDB_PORT=6379
+    FALKORDB_PORT=6380 \
+    FALKORDB_URL=redis://localhost:6380/0 \
+    UV_SYSTEM_PYTHON=1 \
+    PATH="/app/.venv/bin:$PATH"
 
 USER root
 
-# Copy Python 3.12 from the python base image
 COPY --from=python-base /usr/local /usr/local
 
-# Install netcat for wait loop in start.sh and system build tools needed for
-# compiling Python wheels (g++, make, libc-dev)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
-    git \
-    build-essential \
-    curl \
     ca-certificates \
-    gnupg \
+    build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/local/bin/python3.12 /usr/bin/python3 \
     && ln -sf /usr/local/bin/python3.12 /usr/bin/python
 
 WORKDIR /app
 
-# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy pyproject.toml, uv.lock, and README.md (needed by hatchling during install)
-COPY pyproject.toml uv.lock* README.md ./
+COPY pyproject.toml uv.lock README.md ./
+COPY api ./api
+COPY --from=frontend /build/dist ./app/dist
 
-# Install packages into system Python (no virtualenv in container)
-ENV UV_SYSTEM_PYTHON=1
-
-# Ensure venv binaries are on PATH (uv sync always creates .venv)
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Install Python dependencies only (project itself installed after COPY)
-RUN uv sync --frozen --no-dev --no-install-project
-
-# Install Node.js (Node 22) so we can build the frontend inside the image.
-# Use NodeSource setup script to get a recent Node version on Debian-based images.
-# Remove any pre-installed nodejs first to avoid conflicts.
-RUN apt-get update \
-    && apt-get remove -y nodejs || true \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get update \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/* \
-    && node --version && npm --version
-
-# Copy only frontend package files so Docker can cache npm installs when
-# package.json / package-lock.json don't change.
-COPY app/package*.json ./app/
-
-# Install frontend dependencies (reproducible install using package-lock)
-RUN if [ -f ./app/package-lock.json ]; then \
-            npm --prefix ./app ci --no-audit --no-fund; \
-        elif [ -f ./app/package.json ]; then \
-            npm --prefix ./app install --no-audit --no-fund; \
-        else \
-            echo "No frontend package.json found, skipping npm install"; \
-        fi
-
-COPY ./app ./app
-
-RUN npm --prefix ./app run build
-
-# Copy application code 
-COPY . .
-
-# Install the project package now that source code is available
 RUN uv sync --frozen --no-dev
 
-# Copy and make start.sh executable
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
+LABEL org.opencontainers.image.title="QueryWeaver" \
+      org.opencontainers.image.description="Text-to-SQL with graph schema (FastAPI + React)"
 
-# Add MCP label
-LABEL io.modelcontextprotocol.server.name="com.falkordb/QueryWeaver"
+EXPOSE 5000 6380
 
-EXPOSE 5000 6379 3000
-
-# Use start.sh as entrypoint
 ENTRYPOINT ["/start.sh"]

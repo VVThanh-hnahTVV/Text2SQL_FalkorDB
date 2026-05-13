@@ -1,127 +1,219 @@
-import { useEffect, useRef } from "react";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/components/ui/use-toast";
+import type { CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Flex, Grid, Select, Skeleton, Spin, Typography } from "antd";
 import { useDatabase } from "@/contexts/DatabaseContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { useChat } from "@/contexts/ChatContext";
-import LoadingSpinner from "@/components/ui/loading-spinner";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useChat, type ChatMessageData } from "@/contexts/ChatContext";
 import ChatMessage from "./ChatMessage";
 import QueryInput from "./QueryInput";
 import SuggestionCards from "../SuggestionCards";
 import { ChatService } from "@/services/chat";
+import { HistoryService } from "@/services/history";
 import type { ConfirmRequest } from "@/types/api";
 import { getVendorPrefix } from "@/utils/vendorConfig";
+import { getOrInitDemoRole, setDemoRole, type DemoRole } from "@/lib/demoRole";
+import { showToast } from "@/lib/notify";
 
-interface ChatMessageData {
-  id: string;
-  type: 'user' | 'ai' | 'ai-steps' | 'sql-query' | 'query-result' | 'confirmation';
-  content: string;
-  steps?: Array<{
-    icon: 'search' | 'database' | 'code' | 'message';
-    text: string;
-  }>;
-  queryData?: any[]; // For table data
-  visualizationData?: {
-    csv_data: string;
-    schema_info: {
-      columns: string[];
-      numeric_columns: string[];
-      categorical_columns: string[];
-      datetime_columns: string[];
-      row_count: number;
-      unique_counts?: Record<string, number>;
-      error?: string;
-    };
-    visualization_dsl: {
-      chart_type: string;
-      data_columns: string[];
-      config: Record<string, any>;
-      layout: Record<string, any>;
-    };
-  };
-  analysisInfo?: {
-    confidence?: number;
-    missing?: string;
-    ambiguities?: string;
-    explanation?: string;
-    isValid?: boolean;
-  };
-  confirmationData?: {
-    sqlQuery: string;
-    operationType: string;
-    message: string;
-    chatHistory: string[];
-  };
-  timestamp: Date;
+/** Match `ArchitectShell` so fixed footer clears sider / right rail. */
+const SHELL_NAV_WIDTH = 256;
+const SHELL_RAIL_WIDTH = 280;
+
+/** Brave/Chromium: wheel over non-scrollable descendants may not scroll this ancestor — handle explicitly. */
+function isNestedVerticalScroller(node: HTMLElement, stopAt: HTMLElement): boolean {
+  let el: HTMLElement | null = node;
+  while (el && el !== stopAt) {
+    const { overflowY } = window.getComputedStyle(el);
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      el.scrollHeight > el.clientHeight + 1
+    ) {
+      return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
 }
 
 export interface ChatInterfaceProps {
   className?: string;
-  disabled?: boolean; // when true, block interactions
-  onProcessingChange?: (isProcessing: boolean) => void; // callback to notify parent of processing state
-  useMemory?: boolean; // Whether to use memory context
-  useRulesFromDatabase?: boolean; // Whether to use rules from database (backend fetches them)
+  style?: CSSProperties;
+  disabled?: boolean;
+  onProcessingChange?: (isProcessing: boolean) => void;
+  useMemory?: boolean;
+  useRulesFromDatabase?: boolean;
 }
 
-const ChatInterface = ({ 
-  className, 
-  disabled = false, 
-  onProcessingChange, 
+/** Extra scrollable space below the last message when snapping to bottom (px). */
+const SCROLL_END_SPACER_PX = 48;
+
+const ChatInterface = ({
+  className,
+  style,
+  disabled = false,
+  onProcessingChange,
   useMemory = true,
-  useRulesFromDatabase = true
+  useRulesFromDatabase = true,
 }: ChatInterfaceProps) => {
-  const { toast } = useToast();
   const { selectedGraph } = useDatabase();
   const { vendor, apiKey, modelName, isApiKeyValid } = useSettings();
   const { messages, setMessages, conversationHistory, isProcessing, setIsProcessing } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContentRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const inputFooterRef = useRef<HTMLDivElement>(null);
+  const [footerHeight, setFooterHeight] = useState(200);
+  const screens = Grid.useBreakpoint();
+  const [demoRole, setDemoRoleState] = useState<DemoRole>(() => getOrInitDemoRole());
 
-  // Scroll the chat pane only (scrollIntoView can target the wrong ancestor when Plotly/layout inflates).
-  const scrollToBottom = () => {
+  const footerInsetLeft = screens.md ? SHELL_NAV_WIDTH : 0;
+  const footerInsetRight = screens.xl ? SHELL_RAIL_WIDTH : 0;
+
+  /** Use `"auto"` by default: smooth scroll often misses the true bottom when layout keeps changing (skeleton, new blocks). */
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const root = chatContainerRef.current;
+    const sentinel = messagesEndRef.current;
+    if (root) {
+      const maxScroll = root.scrollHeight - root.clientHeight;
+      // Parent chain must bound height; if this div never overflows, scroll the nearest scrollport via sentinel.
+      if (maxScroll > 2) {
+        root.scrollTo({ top: root.scrollHeight, behavior });
+        return;
+      }
+    }
+    sentinel?.scrollIntoView({ behavior, block: "end" });
+  }, []);
+
+  // Brave/Chromium: wheel on message subtrees may not scroll this overflow parent; use non-passive wheel.
+  useEffect(() => {
     const el = chatContainerRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  };
 
-  // Loading message component using skeleton
+    const onWheel = (ev: WheelEvent) => {
+      if (ev.ctrlKey || ev.metaKey) {
+        return;
+      }
+      if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) + 2) {
+        return;
+      }
+      const target = ev.target as HTMLElement | null;
+      if (!target || !el.contains(target)) {
+        return;
+      }
+      if (isNestedVerticalScroller(target, el)) {
+        return;
+      }
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      const prev = el.scrollTop;
+      let next = prev + ev.deltaY;
+      if (next < 0) next = 0;
+      if (next > maxScroll) next = maxScroll;
+      if (next === prev) {
+        return;
+      }
+      el.scrollTop = next;
+      ev.preventDefault();
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   const LoadingMessage = () => (
-    <div className="loading-message-container px-6">
-      <div className="flex gap-3 mb-6 items-start">
-        <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">QW</span>
+    <div style={{ padding: "0 24px" }}>
+      <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+        <div
+          className="sql-gradient"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          QW
         </div>
-        <div className="flex-1 min-w-0 space-y-2">
-          <Skeleton className="h-4 w-3/4 bg-muted" />
-          <Skeleton className="h-4 w-1/2 bg-muted" />
-          <Skeleton className="h-4 w-2/3 bg-muted" />
-        </div>
-      </div>
+        <Flex vertical gap={8} style={{ flex: 1, minWidth: 0 }}>
+          <Skeleton active title={{ width: "60%" }} paragraph={{ rows: 2 }} />
+        </Flex>
+      </Flex>
     </div>
   );
 
   const suggestions = [
     "Show me five customers",
-    "Show me the top customers by revenue", 
-    "What are the pending orders?"
+    "Show me the top customers by revenue",
+    "What are the pending orders?",
   ];
 
-  // Scroll to bottom whenever messages change
-  useEffect(() => {
+  // Snap to bottom after messages / skeleton layout (Skeleton height can settle after first paint).
+  useLayoutEffect(() => {
     scrollToBottom();
-  }, [messages, isProcessing]);
+    let innerRaf = 0;
+    const outerRaf = requestAnimationFrame(() => {
+      scrollToBottom();
+      innerRaf = requestAnimationFrame(() => scrollToBottom());
+    });
+    const processingTimers: ReturnType<typeof setTimeout>[] = [];
+    if (isProcessing) {
+      for (const ms of [120, 280, 450]) {
+        processingTimers.push(setTimeout(() => scrollToBottom(), ms));
+      }
+    }
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf) cancelAnimationFrame(innerRaf);
+      for (const t of processingTimers) clearTimeout(t);
+    };
+  }, [messages, isProcessing, footerHeight, scrollToBottom]);
 
-  // Notify parent component of processing state changes
+  // Tables, charts, and Ant Design Skeleton often resize after paint without a React state change.
+  useEffect(() => {
+    const root = chatContainerRef.current;
+    const content = messagesContentRef.current;
+    if (!root || !content || typeof ResizeObserver === "undefined") return;
+
+    let raf = 0;
+    const snap = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        root.scrollTo({ top: root.scrollHeight, behavior: "auto" });
+      });
+    };
+
+    const ro = new ResizeObserver(snap);
+    ro.observe(content);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
   useEffect(() => {
     onProcessingChange?.(isProcessing);
   }, [isProcessing, onProcessingChange]);
 
+  // Measure the fixed footer height so paddingBottom keeps content above it
+  useEffect(() => {
+    const el = inputFooterRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setFooterHeight(Math.ceil(el.getBoundingClientRect().height));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const handleSendMessage = async (query: string) => {
-  if (isProcessing || disabled) return; // Prevent multiple submissions or when disabled by parent
+    if (isProcessing || disabled) return;
 
     if (!selectedGraph) {
-      toast({
+      showToast({
         title: "No Database Available",
         description: "Please upload a database schema first, or start the QueryWeaver backend to use real databases.",
         variant: "destructive",
@@ -129,13 +221,9 @@ const ChatInterface = ({
       return;
     }
 
-    // Snapshot history before adding the current user message so the backend
-    // sees only prior turns in `history` and the current query in `query`.
     const historySnapshot = [...conversationHistory.current];
+    const started = Date.now();
 
-    setIsProcessing(true);
-
-    // Add user message
     const userMessage: ChatMessageData = {
       id: Date.now().toString(),
       type: "user",
@@ -143,24 +231,22 @@ const ChatInterface = ({
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    conversationHistory.current.push({ role: 'user', content: query });
-    
-    // Scroll to bottom immediately after adding user message
-    setTimeout(() => scrollToBottom(), 100);
-    
-    // Show processing toast
-    toast({
+    setMessages((prev) => [...prev, userMessage]);
+    setIsProcessing(true);
+    conversationHistory.current.push({ role: "user", content: query });
+
+    showToast({
       title: "Processing Query",
       description: "Analyzing your question and generating response...",
     });
-    
+
     try {
-      // No need for a steps accumulator message - we'll add each step as a separate AI message
       let finalContent = "";
       let sqlQuery = "";
       let queryResults: any[] | null = null;
       let visualizationData: ChatMessageData["visualizationData"] | undefined;
+      let sawConfirmation = false;
+      let streamHadError = false;
       let analysisInfo: {
         confidence?: number;
         missing?: string;
@@ -168,92 +254,79 @@ const ChatInterface = ({
         explanation?: string;
         isValid?: boolean;
       } = {};
-      // Stream the query
+
       for await (const message of ChatService.streamQuery({
         query,
         database: selectedGraph.id,
         history: historySnapshot,
-        customApiKey: isApiKeyValid ? apiKey : undefined,
+        customApiKey: isApiKeyValid ? (apiKey ?? undefined) : undefined,
         customModel: isApiKeyValid ? modelName : undefined,
-        customVendor: isApiKeyValid ? vendor : undefined,
+        customVendor: isApiKeyValid ? (vendor ?? undefined) : undefined,
         use_user_rules: useRulesFromDatabase,
         use_memory: useMemory,
+        role: demoRole,
       })) {
-        
-        if (message.type === 'status' || message.type === 'reasoning' || message.type === 'reasoning_step') {
-          // Add each reasoning step as a separate AI message (like the old UI)
-          const stepText = message.content || message.message || '';
-          
+        if (message.type === "status" || message.type === "reasoning" || message.type === "reasoning_step") {
+          const stepText = message.content || message.message || "";
+
           const stepMessage: ChatMessageData = {
             id: `step-${Date.now()}-${Math.random()}`,
             type: "ai",
             content: stepText,
             timestamp: new Date(),
           };
-          
-          setMessages(prev => {
-            const newMessages = [...prev, stepMessage];
-            return newMessages;
-          });
-        } else if (message.type === 'sql_query') {
-          // Store SQL query to display - backend sends it in 'data' field
-          sqlQuery = message.data || message.content || message.message || '';
-          // Also capture analysis information
+
+          setMessages((prev) => [...prev, stepMessage]);
+        } else if (message.type === "sql_query") {
+          sqlQuery = message.data || message.content || message.message || "";
           analysisInfo = {
             confidence: message.conf,
             missing: message.miss,
             ambiguities: message.amb,
             explanation: message.exp,
-            isValid: message.is_valid
+            isValid: message.is_valid,
           };
-
-        } else if (message.type === 'query_result') {
-          // Store query results to display as table - backend sends it in 'data' field
+        } else if (message.type === "query_result") {
           queryResults = message.data || [];
-          visualizationData = message.visualization;
-        } else if (message.type === 'ai_response') {
-          // AI-generated response - this is what we show to the user
-          const responseContent = (message.message || message.content || '').trim();
+          visualizationData = { should_visualize: Boolean(message.should_visualize) };
+        } else if (message.type === "ai_response") {
+          const responseContent = (message.message || message.content || "").trim();
           finalContent = responseContent;
-        } else if (message.type === 'followup_questions') {
-          // Follow-up questions when query is unclear or off-topic
-          const followupContent = (message.message || message.content || '').trim();
+        } else if (message.type === "followup_questions") {
+          const followupContent = (message.message || message.content || "").trim();
           finalContent = followupContent;
-        } else if (message.type === 'error') {
-          // Handle error
-          toast({
+        } else if (message.type === "error") {
+          streamHadError = true;
+          const errText = (message.message || message.content || "").trim() || "Unknown error";
+          showToast({
             title: "Query Failed",
-            description: message.content,
+            description: errText,
             variant: "destructive",
           });
-          finalContent = `Error: ${message.content}`;
-        } else if (message.type === 'confirmation' || message.type === 'destructive_confirmation') {
-          // Handle destructive operation confirmation - add inline confirmation message
+          finalContent = `Error: ${errText}`;
+        } else if (message.type === "confirmation" || message.type === "destructive_confirmation") {
+          sawConfirmation = true;
           const confirmationMessage: ChatMessageData = {
             id: `confirm-${Date.now()}`,
-            type: 'confirmation',
-            content: message.message || message.content || '',
+            type: "confirmation",
+            content: message.message || message.content || "",
             confirmationData: {
-              sqlQuery: message.sql_query || '',
-              operationType: message.operation_type || 'UNKNOWN',
-              message: message.message || message.content || '',
-              chatHistory: conversationHistory.current.map(m => m.content),
+              sqlQuery: message.sql_query || "",
+              operationType: message.operation_type || "UNKNOWN",
+              message: message.message || message.content || "",
+              chatHistory: conversationHistory.current.map((m) => m.content),
             },
             timestamp: new Date(),
           };
 
-          setMessages(prev => [...prev, confirmationMessage]);
+          setMessages((prev) => [...prev, confirmationMessage]);
 
-          // Don't set finalContent - we want the confirmation to be standalone
           finalContent = "";
         } else {
-          console.warn('Unknown message type received:', message.type, message);
+          console.warn("Unknown message type received:", message.type, message);
         }
-        
-        setTimeout(() => scrollToBottom(), 50);
       }
 
-      // Add SQL query message with analysis info (even if SQL is empty)
       if (sqlQuery !== undefined || Object.keys(analysisInfo).length > 0) {
         const sqlMessage: ChatMessageData = {
           id: (Date.now() + 2).toString(),
@@ -262,10 +335,9 @@ const ChatInterface = ({
           analysisInfo: analysisInfo,
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, sqlMessage]);
+        setMessages((prev) => [...prev, sqlMessage]);
       }
-      
-      // Add query results table if available
+
       if (queryResults && queryResults.length > 0) {
         const resultsMessage: ChatMessageData = {
           id: (Date.now() + 3).toString(),
@@ -275,10 +347,9 @@ const ChatInterface = ({
           visualizationData,
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, resultsMessage]);
+        setMessages((prev) => [...prev, resultsMessage]);
       }
-      
-      // Add AI final response if we have one
+
       if (finalContent) {
         const finalResponse: ChatMessageData = {
           id: (Date.now() + 4).toString(),
@@ -286,61 +357,80 @@ const ChatInterface = ({
           content: finalContent,
           timestamp: new Date(),
         };
-        
-        setMessages(prev => [...prev, finalResponse]);
-        conversationHistory.current.push({ role: 'assistant', content: finalContent });
+
+        setMessages((prev) => [...prev, finalResponse]);
+        conversationHistory.current.push({ role: "assistant", content: finalContent });
       }
-      
-      // Show success toast
-      toast({
-        title: "Query Complete",
-        description: "Successfully processed your database query!",
-      });
+
+      if (!sawConfirmation) {
+        const ms = Date.now() - started;
+        const isErr = streamHadError || (typeof finalContent === "string" && finalContent.startsWith("Error:"));
+        void HistoryService.record({
+          graph_id: selectedGraph.id,
+          intent: query,
+          status: isErr ? "error" : "verified",
+          timing_ms: ms,
+          tags: [selectedGraph.name || selectedGraph.id],
+          error_kind: isErr ? "Query error" : undefined,
+        });
+      }
+
+      if (!sawConfirmation && !streamHadError && !(typeof finalContent === "string" && finalContent.startsWith("Error:"))) {
+        showToast({
+          title: "Query Complete",
+          description: "Successfully processed your database query!",
+        });
+      }
     } catch (error) {
-      console.error('Query failed:', error);
-      
+      console.error("Query failed:", error);
+
+      void HistoryService.record({
+        graph_id: selectedGraph.id,
+        intent: query,
+        status: "error",
+        timing_ms: Date.now() - started,
+        tags: [selectedGraph.name || selectedGraph.id],
+        error_kind: "Request failed",
+      });
+
       const errorMessage: ChatMessageData = {
         id: (Date.now() + 2).toString(),
         type: "ai",
-        content: `Failed to process query: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: `Failed to process query: ${error instanceof Error ? error.message : "Unknown error"}`,
         timestamp: new Date(),
       };
-      
-      setMessages(prev => [...prev, errorMessage]);
-      
-      toast({
+
+      setMessages((prev) => [...prev, errorMessage]);
+
+      showToast({
         title: "Query Failed",
         description: error instanceof Error ? error.message : "Failed to process query",
         variant: "destructive",
       });
     } finally {
       setIsProcessing(false);
-      setTimeout(() => scrollToBottom(), 100);
     }
   };
 
   const handleConfirmDestructive = async (messageId: string) => {
     if (!selectedGraph) return;
 
-    // Find the confirmation message to get the data
-    const confirmMessage = messages.find(m => m.id === messageId && m.type === 'confirmation');
+    const confirmMessage = messages.find((m) => m.id === messageId && m.type === "confirmation");
     if (!confirmMessage?.confirmationData) return;
 
     setIsProcessing(true);
 
-    // Remove the confirmation message and replace with "Executing..." message
-    setMessages(prev => prev.filter(m => m.id !== messageId));
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
 
     const executingMessage: ChatMessageData = {
       id: `executing-${Date.now()}`,
-      type: 'ai',
-      content: 'Executing confirmed operation...',
+      type: "ai",
+      content: "Executing confirmed operation...",
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, executingMessage]);
+    setMessages((prev) => [...prev, executingMessage]);
 
-    // Show processing toast
-    toast({
+    showToast({
       title: "Executing Operation",
       description: "Processing your confirmed operation...",
     });
@@ -350,10 +440,9 @@ const ChatInterface = ({
       let queryResults: any[] | null = null;
       let visualizationData: ChatMessageData["visualizationData"] | undefined;
 
-      // Build confirm request with custom credentials if available
       const confirmRequest: ConfirmRequest = {
         sql_query: confirmMessage.confirmationData.sqlQuery,
-        confirmation: 'CONFIRM',
+        confirmation: "CONFIRM",
         chat: confirmMessage.confirmationData.chatHistory,
         use_user_rules: useRulesFromDatabase,
       };
@@ -366,81 +455,67 @@ const ChatInterface = ({
             : `${vendorPrefix}/${modelName}`;
         }
       }
+      confirmRequest.role = demoRole;
 
-      // Stream the confirmation response
-      for await (const message of ChatService.streamConfirmOperation(
-        selectedGraph.id,
-        confirmRequest
-      )) {
-        if (message.type === 'status' || message.type === 'reasoning' || message.type === 'reasoning_step') {
-          // Add reasoning steps
-          const stepText = message.content || message.message || '';
+      for await (const message of ChatService.streamConfirmOperation(selectedGraph.id, confirmRequest)) {
+        if (message.type === "status" || message.type === "reasoning" || message.type === "reasoning_step") {
+          const stepText = message.content || message.message || "";
           const stepMessage: ChatMessageData = {
             id: `step-${Date.now()}-${Math.random()}`,
             type: "ai",
             content: stepText,
             timestamp: new Date(),
           };
-          setMessages(prev => [...prev, stepMessage]);
-        } else if (message.type === 'query_result') {
-          // Store query results
+          setMessages((prev) => [...prev, stepMessage]);
+        } else if (message.type === "query_result") {
           queryResults = message.data || [];
-          visualizationData = message.visualization;
-        } else if (message.type === 'ai_response') {
-          // AI-generated response
-          const responseContent = (message.message || message.content || '').trim();
+          visualizationData = { should_visualize: Boolean(message.should_visualize) };
+        } else if (message.type === "ai_response") {
+          const responseContent = (message.message || message.content || "").trim();
           finalContent = responseContent;
-        } else if (message.type === 'error') {
-          // Handle error - backend sends 'message' field, not 'content'
-          let errorMsg = message.message || message.content || 'Unknown error occurred';
+        } else if (message.type === "error") {
+          let errorMsg = message.message || message.content || "Unknown error occurred";
 
-          // Clean up common database errors to be more user-friendly
-          if (errorMsg.includes('duplicate key value violates unique constraint')) {
+          if (errorMsg.includes("duplicate key value violates unique constraint")) {
             const match = errorMsg.match(/Key \((\w+)\)=\(([^)]+)\)/);
             if (match) {
               const [, field, value] = match;
               errorMsg = `A record with ${field} "${value}" already exists.`;
             } else {
-              errorMsg = 'This record already exists in the database.';
+              errorMsg = "This record already exists in the database.";
             }
-          } else if (errorMsg.includes('violates foreign key constraint')) {
-            errorMsg = 'Cannot perform this operation due to related records in other tables.';
-          } else if (errorMsg.includes('violates not-null constraint')) {
+          } else if (errorMsg.includes("violates foreign key constraint")) {
+            errorMsg = "Cannot perform this operation due to related records in other tables.";
+          } else if (errorMsg.includes("violates not-null constraint")) {
             const match = errorMsg.match(/column "(\w+)"/);
             if (match) {
               errorMsg = `The field "${match[1]}" cannot be empty.`;
             } else {
-              errorMsg = 'Required field cannot be empty.';
+              errorMsg = "Required field cannot be empty.";
             }
-          } else if (errorMsg.includes('PostgreSQL query execution error:') || errorMsg.includes('MySQL query execution error:')) {
-            // Strip the "PostgreSQL/MySQL query execution error:" prefix
-            errorMsg = errorMsg.replace(/^(PostgreSQL|MySQL) query execution error:\s*/i, '');
-            // Remove technical details after newline
-            errorMsg = errorMsg.split('\n')[0];
+          } else if (errorMsg.includes("PostgreSQL query execution error:") || errorMsg.includes("MySQL query execution error:")) {
+            errorMsg = errorMsg.replace(/^(PostgreSQL|MySQL) query execution error:\s*/i, "");
+            errorMsg = errorMsg.split("\n")[0];
           }
 
-          toast({
+          showToast({
             title: "Operation Failed",
             description: errorMsg,
             variant: "destructive",
           });
           finalContent = `${errorMsg}`;
-        } else if (message.type === 'schema_refresh') {
-          // Schema refresh notification
-          const refreshContent = message.message || message.content || '';
+        } else if (message.type === "schema_refresh") {
+          const refreshContent = message.message || message.content || "";
           const refreshMessage: ChatMessageData = {
             id: `refresh-${Date.now()}`,
             type: "ai",
             content: refreshContent,
             timestamp: new Date(),
           };
-          setMessages(prev => [...prev, refreshMessage]);
+          setMessages((prev) => [...prev, refreshMessage]);
         }
-
-        setTimeout(() => scrollToBottom(), 50);
       }
 
-      // Add query results table if available
       if (queryResults && queryResults.length > 0) {
         const resultsMessage: ChatMessageData = {
           id: (Date.now() + 3).toString(),
@@ -450,10 +525,9 @@ const ChatInterface = ({
           visualizationData,
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, resultsMessage]);
+        setMessages((prev) => [...prev, resultsMessage]);
       }
 
-      // Add AI final response if we have one
       if (finalContent) {
         const finalResponse: ChatMessageData = {
           id: (Date.now() + 4).toString(),
@@ -461,76 +535,92 @@ const ChatInterface = ({
           content: finalContent,
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, finalResponse]);
-        conversationHistory.current.push({ role: 'assistant', content: finalContent });
+        setMessages((prev) => [...prev, finalResponse]);
+        conversationHistory.current.push({ role: "assistant", content: finalContent });
       }
 
-      toast({
+      showToast({
         title: "Operation Complete",
         description: "Successfully executed the operation!",
       });
     } catch (error) {
-      console.error('Confirmation error:', error);
+      console.error("Confirmation error:", error);
 
       const errorMessage: ChatMessageData = {
         id: (Date.now() + 2).toString(),
         type: "ai",
-        content: `Failed to execute operation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: `Failed to execute operation: ${error instanceof Error ? error.message : "Unknown error"}`,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
 
-      toast({
+      showToast({
         title: "Operation Failed",
         description: error instanceof Error ? error.message : "Failed to execute operation",
         variant: "destructive",
       });
     } finally {
       setIsProcessing(false);
-      setTimeout(() => scrollToBottom(), 100);
     }
   };
 
   const handleCancelDestructive = (messageId: string) => {
-    // Remove the confirmation message and add cancellation message
-    setMessages(prev => prev.filter(m => m.id !== messageId));
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
 
-    setMessages(prev => [
+    setMessages((prev) => [
       ...prev,
       {
         id: `cancel-${Date.now()}`,
-        type: 'ai',
-        content: 'Operation cancelled. The destructive SQL query was not executed.',
+        type: "ai",
+        content: "Operation cancelled. The destructive SQL query was not executed.",
         timestamp: new Date(),
-      }
+      },
     ]);
 
-    toast({
+    showToast({
       title: "Operation Cancelled",
       description: "The destructive operation was not executed.",
     });
   };
 
   const handleSuggestionSelect = (suggestion: string) => {
-    handleSendMessage(suggestion);
+    void handleSendMessage(suggestion);
   };
 
   return (
     <div
-      className={cn(
-        "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-x-hidden overflow-y-visible bg-background",
-        className,
-      )}
+      className={className}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        flex: 1,
+        overflow: "hidden",
+        background: "#fff",
+        position: "relative",
+        ...style,
+      }}
       data-testid="chat-interface"
     >
-      {/* Grid row 1: minmax(0,1fr) avoids flex min-content blow-up (Plotly / wide content) */}
       <div
         ref={chatContainerRef}
-        className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain scrollbar-visible"
+        className="custom-scrollbar"
+        style={{
+          minHeight: 0,
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+          overscrollBehaviorY: "auto",
+          paddingBottom: footerHeight,
+          touchAction: "pan-y",
+        }}
         data-testid="chat-messages-container"
       >
-        <div className="max-w-full space-y-6 overflow-x-hidden py-6">
+        <div
+          ref={messagesContentRef}
+          style={{ maxWidth: "100%", padding: "24px 0", display: "flex", flexDirection: "column", gap: 24 }}
+        >
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
@@ -541,50 +631,72 @@ const ChatInterface = ({
               visualizationData={msg.visualizationData}
               analysisInfo={msg.analysisInfo}
               confirmationData={msg.confirmationData}
-              onConfirm={msg.type === 'confirmation' ? () => handleConfirmDestructive(msg.id) : undefined}
-              onCancel={msg.type === 'confirmation' ? () => handleCancelDestructive(msg.id) : undefined}
+              onConfirm={msg.type === "confirmation" ? () => void handleConfirmDestructive(msg.id) : undefined}
+              onCancel={msg.type === "confirmation" ? () => handleCancelDestructive(msg.id) : undefined}
             />
           ))}
-          {/* Show loading skeleton when processing */}
           {isProcessing && <LoadingMessage />}
-          {/* Invisible div to scroll to */}
-          <div ref={messagesEndRef} />
+          <div
+            ref={messagesEndRef}
+            aria-hidden
+            style={{ height: SCROLL_END_SPACER_PX, minHeight: SCROLL_END_SPACER_PX, flexShrink: 0 }}
+          />
         </div>
       </div>
 
-      {/* Bottom Section with Suggestions and Input (grid row 2) */}
-      <div className="min-h-0 border-t border-border bg-background">
-        <div className="p-6">
-          {/* Suggestion Cards - Only show for DEMO_CRM database */}
-          {(selectedGraph?.id === 'DEMO_CRM' || selectedGraph?.name === 'DEMO_CRM') && (
+      <div
+        ref={inputFooterRef}
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: footerInsetLeft,
+          right: footerInsetRight,
+          zIndex: 45,
+          borderTop: "1px solid #e0e3e6",
+          background: "#fff",
+          padding: "16px 16px 24px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <Flex align="center" gap={12} wrap="wrap" style={{ marginBottom: 16 }}>
+            <Typography.Text type="secondary">Demo role</Typography.Text>
+            <Select
+              style={{ width: 220 }}
+              value={demoRole}
+              onChange={(v: DemoRole) => {
+                setDemoRole(v);
+                setDemoRoleState(v);
+              }}
+              options={[
+                { value: "admin", label: "Admin (destructive allowed)" },
+                { value: "viewer", label: "Viewer (read-only destructive)" },
+              ]}
+              data-testid="demo-role-select"
+            />
+          </Flex>
+
+          {(selectedGraph?.id === "DEMO_CRM" || selectedGraph?.name === "DEMO_CRM") && (
             <SuggestionCards
               suggestions={suggestions}
               onSelect={handleSuggestionSelect}
               disabled={isProcessing || disabled}
             />
           )}
-          
-          {/* Query Input */}
-          <QueryInput 
-            onSubmit={handleSendMessage}
-            placeholder="Ask me anything about your database..."
+
+          <QueryInput
+            onSubmit={(q) => void handleSendMessage(q)}
+            placeholder="Describe the data you need..."
             disabled={isProcessing || disabled}
+            schemaLabel={selectedGraph?.name}
           />
-          
-          {/* Show loading indicator when processing */}
+
           {isProcessing && (
-            <div className="flex items-center justify-center gap-2 mt-2" data-testid="processing-query-indicator">
-              <LoadingSpinner size="sm" />
-              <span className="text-muted-foreground text-sm">Processing your query...</span>
-            </div>
+            <Flex align="center" justify="center" gap={8} style={{ marginTop: 8 }} data-testid="processing-query-indicator">
+              <Spin size="small" />
+              <Typography.Text type="secondary">Processing your query…</Typography.Text>
+            </Flex>
           )}
-          
-          {/* Footer */}
-          <div className="text-center mt-4">
-            <p className="text-muted-foreground text-sm">
-              Powered by <a href="https://falkordb.com" target="_blank">FalkorDB</a>
-            </p>
-          </div>
         </div>
       </div>
     </div>

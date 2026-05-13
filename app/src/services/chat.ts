@@ -1,5 +1,6 @@
 import { API_CONFIG, buildApiUrl } from '@/config/api';
 import { csrfHeaders } from '@/lib/csrf';
+import { userIdHeaders } from '@/lib/anonymousUser';
 import type { ChatRequest, StreamMessage, ConfirmRequest } from '@/types/api';
 import { getVendorPrefix } from '@/utils/vendorConfig';
 
@@ -63,6 +64,7 @@ export class ChatService {
         headers: {
           'Content-Type': 'application/json',
           ...csrfHeaders(),
+          ...userIdHeaders(),
         },
         body: JSON.stringify({
           ...requestBody,
@@ -72,7 +74,8 @@ export class ChatService {
           }),
           ...(request.use_memory !== undefined && {
             use_memory: request.use_memory
-          })
+          }),
+          ...(request.role !== undefined && { role: request.role }),
         }),
         credentials: 'include',
       });
@@ -194,6 +197,7 @@ export class ChatService {
         headers: {
           'Content-Type': 'application/json',
           ...csrfHeaders(),
+          ...userIdHeaders(),
         },
         body: JSON.stringify(request),
         credentials: 'include',

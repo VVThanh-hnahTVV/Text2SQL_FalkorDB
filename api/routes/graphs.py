@@ -1,7 +1,8 @@
 """Graph-related routes for the text2sql API."""
 
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File
+import re
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -24,6 +25,22 @@ from api.core.text2sql import (
 from api.graph import get_user_rules, set_user_rules
 
 graphs_router = APIRouter(tags=["Graphs & Databases"])
+USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+
+def _resolve_memory_user_id(request: Request) -> str:
+    """Resolve memory user id from header/cookie with safe fallback."""
+    candidate = (
+        request.headers.get("X-User-Id")
+        or request.cookies.get("anon_id")
+        or DEFAULT_USER_ID
+    )
+    value = str(candidate).strip()[:128]
+    if not value:
+        return DEFAULT_USER_ID
+    if not USER_ID_PATTERN.match(value):
+        return DEFAULT_USER_ID
+    return value
 
 
 class GraphData(BaseModel):
@@ -112,7 +129,7 @@ async def load_graph(
     tags=["mcp_tool"],
 )
 async def query_graph(
-    graph_id: str, chat_data: ChatRequest
+    graph_id: str, chat_data: ChatRequest, request: Request
 ):  # pylint: disable=too-many-statements
     """
     Query the Database with the given graph_id and chat_data.
@@ -122,7 +139,13 @@ async def query_graph(
         chat_data (ChatRequest): The chat data containing user queries and context.
     """
     try:
-        generator = await query_database(DEFAULT_USER_ID, graph_id, chat_data)
+        memory_user_id = _resolve_memory_user_id(request)
+        generator = await query_database(
+            DEFAULT_USER_ID,
+            graph_id,
+            chat_data,
+            memory_user_id=memory_user_id,
+        )
         return StreamingResponse(generator, media_type="application/json")
     except InvalidArgumentError as iae:
         logging.warning("Invalid argument in query: %s", str(iae))
@@ -133,12 +156,17 @@ async def query_graph(
 async def confirm_destructive_operation(
     graph_id: str,
     confirm_data: ConfirmRequest,
+    request: Request,
 ):
     """Handle user confirmation for destructive SQL operations."""
 
     try:
+        memory_user_id = _resolve_memory_user_id(request)
         generator = await execute_destructive_operation(
-            DEFAULT_USER_ID, graph_id, confirm_data
+            DEFAULT_USER_ID,
+            graph_id,
+            confirm_data,
+            memory_user_id=memory_user_id,
         )
         return StreamingResponse(generator, media_type="application/json")
     except InvalidArgumentError as iae:

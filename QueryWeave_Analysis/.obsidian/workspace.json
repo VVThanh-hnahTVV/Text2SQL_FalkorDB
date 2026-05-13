@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Querywave Analysis.md",
+                "file": "Need to do.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Querywave Analysis"
+              "title": "Need to do"
             }
           }
         ]
@@ -185,6 +185,7 @@
   },
   "active": "9129c1b869546643",
   "lastOpenFiles": [
-    "Querywave Analysis.md"
+    "Querywave Analysis.md",
+    "Need to do.md"
   ]
 }

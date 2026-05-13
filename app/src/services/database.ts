@@ -1,5 +1,6 @@
 import { API_CONFIG, buildApiUrl } from '@/config/api';
 import { csrfHeaders } from '@/lib/csrf';
+import { userIdHeaders } from '@/lib/anonymousUser';
 import type { Graph, GraphUploadResponse, SchemaUploadRequest } from '@/types/api';
 
 /**
@@ -18,6 +19,9 @@ export class DatabaseService {
       
       const response = await fetch(url, {
         credentials: 'include',
+        headers: {
+          ...userIdHeaders(),
+        },
       });
 
       console.log('Graphs response status:', response.status);
@@ -69,6 +73,9 @@ export class DatabaseService {
         buildApiUrl(API_CONFIG.ENDPOINTS.GRAPH_BY_ID(id)),
         {
           credentials: 'include',
+          headers: {
+            ...userIdHeaders(),
+          },
         }
       );
 
@@ -93,6 +100,9 @@ export class DatabaseService {
         buildApiUrl(`/graphs/${encodeURIComponent(id)}/data`),
         {
           credentials: 'include',
+          headers: {
+            ...userIdHeaders(),
+          },
         }
       );
 
@@ -131,6 +141,7 @@ export class DatabaseService {
         credentials: 'include',
         headers: {
           ...csrfHeaders(),
+          ...userIdHeaders(),
         },
       });
 
@@ -163,6 +174,7 @@ export class DatabaseService {
           credentials: 'include',
           headers: {
             ...csrfHeaders(),
+            ...userIdHeaders(),
           },
         }
       );
@@ -190,6 +202,7 @@ export class DatabaseService {
         headers: {
           'Content-Type': 'application/json',
           ...csrfHeaders(),
+          ...userIdHeaders(),
         },
         body: JSON.stringify({
           url: config.connectionUrl,
@@ -249,6 +262,7 @@ export class DatabaseService {
         headers: {
           'Content-Type': 'application/json',
           ...csrfHeaders(),
+          ...userIdHeaders(),
         },
         body: JSON.stringify({
           url: connectionUrl,
@@ -295,6 +309,9 @@ export class DatabaseService {
       
       const response = await fetch(url, {
         credentials: 'include',
+        headers: {
+          ...userIdHeaders(),
+        },
       });
 
       if (!response.ok) {
@@ -327,6 +344,7 @@ export class DatabaseService {
         headers: {
           'Content-Type': 'application/json',
           ...csrfHeaders(),
+          ...userIdHeaders(),
         },
         body: JSON.stringify({ user_rules: userRules }),
       });

@@ -2,12 +2,10 @@
 # pylint: disable=line-too-long,trailing-whitespace
 
 import asyncio
-import csv
 import json
 import logging
 import os
 import time
-from io import StringIO
 from typing import Any
 
 from pydantic import BaseModel
@@ -24,7 +22,6 @@ from api.loaders.postgres_loader import PostgresLoader
 from api.loaders.mysql_loader import MySQLLoader
 from api.memory.graphiti_tool import MemoryTool
 from api.sql_utils import SQLIdentifierQuoter, DatabaseSpecificQuoter
-from api.visualization import VisualizationService, analyze_csv_schema
 
 # Use the same delimiter as in the JavaScript
 MESSAGE_DELIMITER = "|||FALKORDB_MESSAGE_BOUNDARY|||"
@@ -32,37 +29,17 @@ MESSAGE_DELIMITER = "|||FALKORDB_MESSAGE_BOUNDARY|||"
 GENERAL_PREFIX = os.getenv("GENERAL_PREFIX")
 
 
-def _query_results_to_csv(query_results: list[dict[str, Any]]) -> str:
-    """Convert list-of-dict SQL results into CSV string."""
-    if not query_results:
-        return ""
-
-    fieldnames = [str(field) for field in query_results[0].keys()]
-    buffer = StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in query_results:
-        writer.writerow({name: row.get(name) for name in fieldnames})
-    return buffer.getvalue()
-
-
-def _build_visualization_payload(
-    query_results: list[dict[str, Any]], question: str
-) -> dict[str, Any]:
-    """Build CSV + schema + DSL payload while preserving failures gracefully."""
-    csv_data = _query_results_to_csv(query_results)
-    schema_info = analyze_csv_schema(csv_data)
-    visualization_service = VisualizationService()
-    dsl = visualization_service.generate_visualization(
-        csv_data=csv_data,
-        question=question,
-        schema_info=schema_info,
+def _should_visualize(query_results: list[dict[str, Any]]) -> bool:
+    """Heuristic: visualize when there are at least 2 rows, 2+ columns, and >=1 numeric column."""
+    if not query_results or len(query_results) < 2:
+        return False
+    sample = query_results[0]
+    if len(sample) < 2:
+        return False
+    return any(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in sample.values()
     )
-    return {
-        "csv_data": csv_data,
-        "schema_info": schema_info,
-        "visualization_dsl": dsl.to_dict(),
-    }
 
 class GraphData(BaseModel):
     """Graph data model.
@@ -86,6 +63,7 @@ class ChatRequest(BaseModel):
     custom_model: str | None = None
     use_user_rules: bool = True  # If True, fetch rules from database; if False, don't use rules
     use_memory: bool = True
+    role: str | None = None  # Demo: "viewer" blocks destructive SQL; omit or "admin" allows
 
 
 class ConfirmRequest(BaseModel):
@@ -99,6 +77,7 @@ class ConfirmRequest(BaseModel):
     chat: list = []
     custom_api_key: str | None = None
     custom_model: str | None = None
+    role: str | None = None  # Demo: must match chat role to execute confirmed destructive SQL
 
 
 def get_database_type_and_loader(db_url: str):
@@ -111,17 +90,6 @@ def get_database_type_and_loader(db_url: str):
     Returns:
         tuple: (database_type, loader_class)
     """
-    if not db_url or db_url == "No URL available for this database.":
-        return None, None
-
-    db_url_lower = db_url.lower()
-
-    if db_url_lower.startswith('postgresql://') or db_url_lower.startswith('postgres://'):
-        return 'postgresql', PostgresLoader
-    if db_url_lower.startswith('mysql://'):
-        return 'mysql', MySQLLoader
-
-    # Default to PostgresLoader for backward compatibility
     return 'postgresql', PostgresLoader
 
 def sanitize_query(query: str) -> str:
@@ -139,6 +107,16 @@ def sanitize_log_input(value: str) -> str:
     return value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
 
 DEFAULT_USER_ID = "default"
+
+
+def destructive_role_allowed(role: str | None) -> bool:
+    """Demo-only: block destructive SQL when role is explicitly viewer.
+
+    Missing or unknown values are treated as admin for backward compatibility.
+    """
+    if role is None:
+        return True
+    return str(role).strip().lower() != "viewer"
 
 
 def _graph_name(user_id: str, graph_id:str) -> str:
@@ -243,10 +221,16 @@ async def get_schema(user_id: str, graph_id: str):  # pylint: disable=too-many-l
             continue
         seen.add(key)
         links.append({"source": source, "target": target})
-
+    # print("***************** get_schema: nodes", nodes)
+    # print("***************** get_schema: links", links)
     return {"nodes": nodes, "links": links}
 
-async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  # pylint: disable=too-many-statements
+async def query_database(  # pylint: disable=too-many-statements
+    user_id: str,
+    graph_id: str,
+    chat_data: ChatRequest,
+    memory_user_id: str | None = None,
+):
     """
     Query the Database with the given graph_id and chat_data.
     
@@ -255,7 +239,9 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
             chat_data (ChatRequest): The chat data containing user queries and context.
     """
     graph_id = _graph_name(user_id, graph_id)
-
+    print("***************** query_database: graph_id", graph_id)
+    print("***************** query_database: chat_data", chat_data)
+    print("***************** query_database: user_id", user_id)
     queries_history = chat_data.chat if hasattr(chat_data, 'chat') else None
     result_history = chat_data.result if hasattr(chat_data, 'result') else None
     instructions = chat_data.instructions if hasattr(chat_data, 'instructions') else None
@@ -280,8 +266,9 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
 
     logging.info("User Query: %s", sanitize_query(queries_history[-1]))
 
+    memory_user_id = (memory_user_id or user_id).strip() or user_id
     if chat_data.use_memory:
-        memory_tool_task = asyncio.create_task(MemoryTool.create(user_id, graph_id))
+        memory_tool_task = asyncio.create_task(MemoryTool.create(memory_user_id, graph_id))
     else:
         memory_tool_task = None
 
@@ -463,6 +450,25 @@ async def query_database(user_id: str, graph_id: str, chat_data: ChatRequest):  
                 is_destructive = sql_type in destructive_ops
                 general_graph = graph_id.startswith(GENERAL_PREFIX) if GENERAL_PREFIX else False
                 if is_destructive and not general_graph:
+                    if not destructive_role_allowed(chat_data.role):
+                        msg = (
+                            "Destructive operations are not allowed for the viewer role. "
+                            "Switch to admin (demo role) to run INSERT/UPDATE/DELETE and similar."
+                        )
+                        yield json.dumps(
+                            {
+                                "type": "error",
+                                "final_response": True,
+                                "message": msg,
+                                "content": msg,
+                            }
+                        ) + MESSAGE_DELIMITER
+                        overall_elapsed = time.perf_counter() - overall_start
+                        logging.info(
+                            "Query blocked: destructive op disallowed for role=viewer - %.2fs",
+                            overall_elapsed,
+                        )
+                        return
                     # This is a destructive operation - ask for user confirmation
                     confirmation_message = f"""⚠️ DESTRUCTIVE OPERATION DETECTED ⚠️
 
@@ -606,15 +612,11 @@ What this will do:
                             }) + MESSAGE_DELIMITER
 
                         if len(query_results) != 0:
-                            visualization_payload = _build_visualization_payload(
-                                query_results=query_results,
-                                question=queries_history[-1] if queries_history else "",
-                            )
                             yield json.dumps(
                                 {
                                     "type": "query_result",
                                     "data": query_results,
-                                    "visualization": visualization_payload,
+                                    "should_visualize": _should_visualize(query_results),
                                     "final_response": False
                                 }
                             ) + MESSAGE_DELIMITER
@@ -791,6 +793,7 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
     user_id: str,
     graph_id: str,
     confirm_data: ConfirmRequest,
+    memory_user_id: str | None = None,
 ):
     """
     Handle user confirmation for destructive SQL operations
@@ -811,11 +814,13 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
     if not sql_query:
         raise InvalidArgumentError("No SQL query provided")
 
+    memory_user_id = (memory_user_id or user_id).strip() or user_id
+
     # Create a generator function for streaming the confirmation response
     async def generate_confirmation():  # pylint: disable=too-many-locals,too-many-statements
         # Create memory tool for saving query results
         try:
-            memory_tool = await MemoryTool.create(user_id, graph_id)
+            memory_tool = await MemoryTool.create(memory_user_id, graph_id)
         except Exception as mem_error:  # pylint: disable=broad-exception-caught
             logging.warning(
                 "Memory initialization failed for destructive operation; continuing without memory: %s",
@@ -825,6 +830,20 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
         result_history = []  # Initialize result_history for this context
 
         if confirmation == "CONFIRM":
+            if not destructive_role_allowed(confirm_data.role):
+                msg = (
+                    "Destructive operations are not allowed for the viewer role. "
+                    "Switch to admin (demo role) to confirm this operation."
+                )
+                yield json.dumps(
+                    {
+                        "type": "error",
+                        "final_response": True,
+                        "message": msg,
+                        "content": msg,
+                    }
+                ) + MESSAGE_DELIMITER
+                return
             try:
                 db_description, db_url = await get_db_description(graph_id)
 
@@ -880,15 +899,11 @@ async def execute_destructive_operation(  # pylint: disable=too-many-statements
                     loader_class.is_schema_modifying_query(sql_query)
                 )
                 query_results = loader_class.execute_sql_query(sql_query, db_url)
-                visualization_payload = _build_visualization_payload(
-                    query_results=query_results,
-                    question=queries_history[-1] if queries_history else "Destructive operation",
-                )
                 yield json.dumps(
                     {
                         "type": "query_result",
                         "data": query_results,
-                        "visualization": visualization_payload,
+                        "should_visualize": _should_visualize(query_results),
                     }
                 ) + MESSAGE_DELIMITER
 

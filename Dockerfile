@@ -1,7 +1,7 @@
 # =============================================================================
 # QueryWeaver — FastAPI + Vite UI, runtime bundled with FalkorDB
 # Build: docker build -t queryweaver .
-# Run:  docker run --rm -p 5000:5000 -p 6380:6380 -e OPENAI_API_KEY=... queryweaver
+# Run:  docker run --rm -p 5000:5000 -p 6379:6379 -e OPENAI_API_KEY=... queryweaver
 # =============================================================================
 
 # ---- Frontend (Vite 7 needs Node >= 20.19) ----
@@ -20,8 +20,8 @@ FROM falkordb/falkordb:latest
 
 ENV PYTHONUNBUFFERED=1 \
     FALKORDB_HOST=localhost \
-    FALKORDB_PORT=6380 \
-    FALKORDB_URL=redis://localhost:6380/0 \
+    FALKORDB_PORT=6379 \
+    FALKORDB_URL=redis://localhost:6379/0 \
     UV_SYSTEM_PYTHON=1 \
     PATH="/app/.venv/bin:$PATH"
 
@@ -53,6 +53,6 @@ RUN chmod +x /start.sh
 LABEL org.opencontainers.image.title="QueryWeaver" \
       org.opencontainers.image.description="Text-to-SQL with graph schema (FastAPI + React)"
 
-EXPOSE 5000 6380
+EXPOSE 5000 6379
 
 ENTRYPOINT ["/start.sh"]

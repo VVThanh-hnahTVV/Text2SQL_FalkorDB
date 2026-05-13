@@ -303,7 +303,21 @@ const Index = () => {
               </Typography.Title>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, padding: "0 16px 0", maxWidth: 1200, width: "100%", margin: "0 auto", alignSelf: "stretch" }}>
+            {/* Must be a flex column so ChatInterface flex:1 + minHeight:0 gets a bounded height; otherwise the chat grows with content and internal scroll never activates. */}
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                padding: "0 16px 0",
+                maxWidth: 1200,
+                width: "100%",
+                margin: "0 auto",
+                alignSelf: "stretch",
+              }}
+            >
               <ChatInterface
                 style={{ minHeight: 0, flex: 1 }}
                 disabled={isRefreshingSchema}

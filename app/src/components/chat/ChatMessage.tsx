@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
   Button,
   Card,
   Flex,
+  Input,
   Progress,
   Select,
   Space,
@@ -20,8 +21,11 @@ import {
   ExclamationCircleOutlined,
   CopyOutlined,
   CheckOutlined,
+  DownloadOutlined,
+  FileImageOutlined,
 } from '@ant-design/icons';
-import G2Chart from './G2Chart';
+import G2Chart, { type G2ChartRef } from './G2Chart';
+import { AiMarkdownContent } from './AiMarkdownContent';
 import {
   adviceTypeToBuilderType,
   extractAxesFromAdvice,
@@ -29,6 +33,8 @@ import {
   type Advice,
 } from '@/lib/avaAdvisor';
 import { buildG2Spec } from '@/lib/g2Spec';
+import { downloadQueryResultsCsv } from '@/lib/exportCsv';
+import { showToast } from '@/lib/notify';
 interface Step {
   icon: 'search' | 'database' | 'code' | 'message';
   text: string;
@@ -280,6 +286,7 @@ const OptionalColumnSelect = ({
 );
 
 const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps) => {
+  const chartExportRef = useRef<G2ChartRef>(null);
   const columns = useMemo(() => Object.keys(queryData[0] || {}), [queryData]);
   const columnsKey = columns.join('\0');
 
@@ -295,11 +302,13 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
     shouldVisualize ? deriveInitialDraft(queryData, topAdvice) : ({} as ChartDraft),
   );
   const [applied, setApplied] = useState<ChartDraft | null>(null);
+  const [chartPlotTitle, setChartPlotTitle] = useState("Query Results");
 
   useEffect(() => {
     if (!shouldVisualize || columns.length === 0) return;
     setDraft(deriveInitialDraft(queryData, topAdvice));
     setApplied(null);
+    setChartPlotTitle("Query Results");
   }, [adviceSignature, columnsKey, shouldVisualize]);
 
   const handleCreateChart = useCallback(() => {
@@ -313,6 +322,7 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
     if (applied.chartType.toLowerCase() === 'table') return null;
     if (!canRenderDraftConfig(queryData, applied.chartType, applied)) return null;
     return buildG2Spec(queryData, applied.chartType, {
+      title: chartPlotTitle.trim() || "Query Results",
       x:
         applied.chartType === 'box'
           ? applied.x || undefined
@@ -325,9 +335,35 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
       barLayout:
         applied.chartType === 'bar' && applied.color ? applied.barLayout : undefined,
     });
-  }, [applied, queryData]);
+  }, [applied, queryData, chartPlotTitle]);
 
   const headerChartBadge = applied?.chartType ?? draft.chartType;
+
+  const handleDownloadCsv = useCallback(() => {
+    const ok = downloadQueryResultsCsv(queryData as Record<string, unknown>[]);
+    if (ok) {
+      showToast({ title: 'CSV downloaded', description: 'Result rows saved as a CSV file.' });
+    } else {
+      showToast({
+        title: 'Nothing to export',
+        description: 'There are no rows to save.',
+        variant: 'destructive',
+      });
+    }
+  }, [queryData]);
+
+  const handleDownloadChartPng = useCallback(() => {
+    const ok = chartExportRef.current?.downloadJpeg() ?? false;
+    if (ok) {
+      showToast({ title: 'Chart saved', description: 'JPEG image downloaded.' });
+    } else {
+      showToast({
+        title: 'Could not save chart',
+        description: 'Create a chart first, or try again after it finishes rendering.',
+        variant: 'destructive',
+      });
+    }
+  }, []);
 
   return (
     <>
@@ -339,7 +375,29 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
         {shouldVisualize && headerChartBadge ? (
           <Tag data-testid="query-results-chart-type-badge">{headerChartBadge}</Tag>
         ) : null}
-        <Tag style={{ marginLeft: "auto" }}>{queryData?.length || 0} rows</Tag>
+        <Space style={{ marginLeft: 'auto' }} wrap size={8} align="center">
+          <Tag>{queryData?.length || 0} rows</Tag>
+          <Button
+            type="default"
+            size="small"
+            icon={<DownloadOutlined />}
+            onClick={handleDownloadCsv}
+            disabled={!queryData?.length}
+            data-testid="query-results-download-csv"
+          >
+            CSV
+          </Button>
+          <Button
+            type="default"
+            size="small"
+            icon={<FileImageOutlined />}
+            onClick={handleDownloadChartPng}
+            disabled={!chartSpec}
+            data-testid="query-results-download-chart-jpeg"
+          >
+            Chart JPEG
+          </Button>
+        </Space>
       </Flex>
 
       {shouldVisualize && columns.length > 0 ? (
@@ -358,6 +416,19 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
             <Typography.Text strong>Tạo biểu đồ</Typography.Text>.
           </Typography.Paragraph>
           <Flex vertical gap={12} style={{ width: "100%" }}>
+            <Flex vertical gap={6} style={{ width: "100%", maxWidth: 480 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Tiêu đề biểu đồ
+              </Typography.Text>
+              <Input
+                value={chartPlotTitle}
+                onChange={(e) => setChartPlotTitle(e.target.value)}
+                placeholder="Ví dụ: Doanh thu theo tháng"
+                maxLength={120}
+                allowClear
+                data-testid="chart-plot-title-input"
+              />
+            </Flex>
             <Flex gap={12} wrap="wrap" align="flex-end">
               <Flex vertical gap={6} style={{ width: "100%", maxWidth: 200 }}>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -508,7 +579,7 @@ const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps)
             }}
             data-testid="query-results-plot"
           >
-            <G2Chart spec={chartSpec} height={380} />
+            <G2Chart ref={chartExportRef} spec={chartSpec} height={380} />
           </div>
         </div>
       ) : shouldVisualize ? (
@@ -797,9 +868,7 @@ const ChatMessage = ({
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
           <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
           <div style={{ flex: 1, minWidth: 0, borderLeft: "4px solid #3f51b5", paddingLeft: 16 }}>
-            <Typography.Paragraph style={{ margin: 0, fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-line" }}>
-              {content}
-            </Typography.Paragraph>
+            <AiMarkdownContent content={content} />
           </div>
         </Flex>
       </div>

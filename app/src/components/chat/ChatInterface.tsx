@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Flex, Grid, Select, Skeleton, Spin, Typography } from "antd";
 import { useDatabase } from "@/contexts/DatabaseContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -18,6 +18,22 @@ import { showToast } from "@/lib/notify";
 const SHELL_NAV_WIDTH = 256;
 const SHELL_RAIL_WIDTH = 280;
 
+/** Brave/Chromium: wheel over non-scrollable descendants may not scroll this ancestor — handle explicitly. */
+function isNestedVerticalScroller(node: HTMLElement, stopAt: HTMLElement): boolean {
+  let el: HTMLElement | null = node;
+  while (el && el !== stopAt) {
+    const { overflowY } = window.getComputedStyle(el);
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      el.scrollHeight > el.clientHeight + 1
+    ) {
+      return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
 export interface ChatInterfaceProps {
   className?: string;
   style?: CSSProperties;
@@ -26,6 +42,9 @@ export interface ChatInterfaceProps {
   useMemory?: boolean;
   useRulesFromDatabase?: boolean;
 }
+
+/** Extra scrollable space below the last message when snapping to bottom (px). */
+const SCROLL_END_SPACER_PX = 48;
 
 const ChatInterface = ({
   className,
@@ -39,6 +58,7 @@ const ChatInterface = ({
   const { vendor, apiKey, modelName, isApiKeyValid } = useSettings();
   const { messages, setMessages, conversationHistory, isProcessing, setIsProcessing } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContentRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputFooterRef = useRef<HTMLDivElement>(null);
   const [footerHeight, setFooterHeight] = useState(200);
@@ -48,9 +68,55 @@ const ChatInterface = ({
   const footerInsetLeft = screens.md ? SHELL_NAV_WIDTH : 0;
   const footerInsetRight = screens.xl ? SHELL_RAIL_WIDTH : 0;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  };
+  /** Use `"auto"` by default: smooth scroll often misses the true bottom when layout keeps changing (skeleton, new blocks). */
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const root = chatContainerRef.current;
+    const sentinel = messagesEndRef.current;
+    if (root) {
+      const maxScroll = root.scrollHeight - root.clientHeight;
+      // Parent chain must bound height; if this div never overflows, scroll the nearest scrollport via sentinel.
+      if (maxScroll > 2) {
+        root.scrollTo({ top: root.scrollHeight, behavior });
+        return;
+      }
+    }
+    sentinel?.scrollIntoView({ behavior, block: "end" });
+  }, []);
+
+  // Brave/Chromium: wheel on message subtrees may not scroll this overflow parent; use non-passive wheel.
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+
+    const onWheel = (ev: WheelEvent) => {
+      if (ev.ctrlKey || ev.metaKey) {
+        return;
+      }
+      if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) + 2) {
+        return;
+      }
+      const target = ev.target as HTMLElement | null;
+      if (!target || !el.contains(target)) {
+        return;
+      }
+      if (isNestedVerticalScroller(target, el)) {
+        return;
+      }
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      const prev = el.scrollTop;
+      let next = prev + ev.deltaY;
+      if (next < 0) next = 0;
+      if (next > maxScroll) next = maxScroll;
+      if (next === prev) {
+        return;
+      }
+      el.scrollTop = next;
+      ev.preventDefault();
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const LoadingMessage = () => (
     <div style={{ padding: "0 24px" }}>
@@ -85,10 +151,48 @@ const ChatInterface = ({
     "What are the pending orders?",
   ];
 
-  // Scroll to bottom whenever messages list or processing state changes
-  useEffect(() => {
+  // Snap to bottom after messages / skeleton layout (Skeleton height can settle after first paint).
+  useLayoutEffect(() => {
     scrollToBottom();
-  }, [messages, isProcessing]);
+    let innerRaf = 0;
+    const outerRaf = requestAnimationFrame(() => {
+      scrollToBottom();
+      innerRaf = requestAnimationFrame(() => scrollToBottom());
+    });
+    const processingTimers: ReturnType<typeof setTimeout>[] = [];
+    if (isProcessing) {
+      for (const ms of [120, 280, 450]) {
+        processingTimers.push(setTimeout(() => scrollToBottom(), ms));
+      }
+    }
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf) cancelAnimationFrame(innerRaf);
+      for (const t of processingTimers) clearTimeout(t);
+    };
+  }, [messages, isProcessing, footerHeight, scrollToBottom]);
+
+  // Tables, charts, and Ant Design Skeleton often resize after paint without a React state change.
+  useEffect(() => {
+    const root = chatContainerRef.current;
+    const content = messagesContentRef.current;
+    if (!root || !content || typeof ResizeObserver === "undefined") return;
+
+    let raf = 0;
+    const snap = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        root.scrollTo({ top: root.scrollHeight, behavior: "auto" });
+      });
+    };
+
+    const ro = new ResizeObserver(snap);
+    ro.observe(content);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   useEffect(() => {
     onProcessingChange?.(isProcessing);
@@ -507,12 +611,16 @@ const ChatInterface = ({
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          overscrollBehaviorY: "contain",
+          overscrollBehaviorY: "auto",
           paddingBottom: footerHeight,
+          touchAction: "pan-y",
         }}
         data-testid="chat-messages-container"
       >
-        <div style={{ maxWidth: "100%", padding: "24px 0", display: "flex", flexDirection: "column", gap: 24 }}>
+        <div
+          ref={messagesContentRef}
+          style={{ maxWidth: "100%", padding: "24px 0", display: "flex", flexDirection: "column", gap: 24 }}
+        >
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
@@ -528,7 +636,11 @@ const ChatInterface = ({
             />
           ))}
           {isProcessing && <LoadingMessage />}
-          <div ref={messagesEndRef} />
+          <div
+            ref={messagesEndRef}
+            aria-hidden
+            style={{ height: SCROLL_END_SPACER_PX, minHeight: SCROLL_END_SPACER_PX, flexShrink: 0 }}
+          />
         </div>
       </div>
 

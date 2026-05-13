@@ -4,10 +4,9 @@ import { Chart } from '@antv/g2';
 interface G2ChartProps {
   spec: Record<string, any> | null;
   height?: number;
-  className?: string;
 }
 
-const G2Chart = ({ spec, height = 380, className }: G2ChartProps) => {
+const G2Chart = ({ spec, height = 380 }: G2ChartProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Chart | null>(null);
 
@@ -37,8 +36,7 @@ const G2Chart = ({ spec, height = 380, className }: G2ChartProps) => {
   return (
     <div
       ref={containerRef}
-      className={className ?? 'w-full'}
-      style={{ height }}
+      style={{ height, width: "100%" }}
       data-testid="g2-chart"
     />
   );

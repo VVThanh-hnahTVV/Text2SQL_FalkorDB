@@ -101,3 +101,31 @@ export interface ApiError {
   status?: number;
 }
 
+/** Query history (GET /history, POST /history) */
+export type QueryHistoryStatus = "verified" | "error";
+
+export interface QueryHistoryItem {
+  id: string;
+  graph_id: string;
+  intent: string;
+  status: QueryHistoryStatus;
+  timing_ms: number | null;
+  executed_at: string;
+  tags: string[];
+  error_kind: string | null;
+}
+
+export interface QueryHistoryListResponse {
+  items: QueryHistoryItem[];
+  total: number;
+}
+
+export interface QueryHistoryRecordCreate {
+  graph_id: string;
+  intent: string;
+  status: QueryHistoryStatus;
+  timing_ms?: number | null;
+  tags?: string[];
+  error_kind?: string | null;
+}
+

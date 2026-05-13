@@ -20,32 +20,16 @@ test.describe('Left Sidebar Tests', () => {
     await browser.setPageToFullScreen();
 
     const initialTheme = await sidebar.getCurrentTheme();
-    expect(initialTheme).toBe('dark');
+    expect(initialTheme).toBe("light");
     await sidebar.clickOnThemeToggle();
 
     const afterToggleTheme = await sidebar.getCurrentTheme();
-    expect(afterToggleTheme).toBe('light');
+    expect(afterToggleTheme).toBe("dark");
 
     await sidebar.clickOnThemeToggle();
 
     const finalTheme = await sidebar.getCurrentTheme();
-    expect(finalTheme).toBe('dark');
-  });
-
-  test('documentation link points to correct URL', async () => {
-    const sidebar = await browser.createNewPage(Sidebar, getBaseUrl());
-    await browser.setPageToFullScreen();
-
-    const docHref = await sidebar.getDocumentationLinkHref();
-    expect(docHref).toBe('https://docs.falkordb.com/');
-  });
-
-  test('support link points to correct URL', async () => {
-    const sidebar = await browser.createNewPage(Sidebar, getBaseUrl());
-    await browser.setPageToFullScreen();
-
-    const supportHref = await sidebar.getSupportLinkHref();
-    expect(supportHref).toBe('https://discord.com/invite/jyUgBweNQz');
+    expect(finalTheme).toBe("light");
   });
 
   test('schema button opens and closes schema panel', async () => {

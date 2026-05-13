@@ -1,112 +1,49 @@
-import { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Trash2, RefreshCw, PanelLeft } from "lucide-react";
-import Sidebar from "@/components/layout/Sidebar";
+import { useState, useRef } from "react";
+import { Button, Dropdown, Space, Tag, Typography, Spin } from "antd";
+import type { MenuProps } from "antd";
+import {
+  DatabaseOutlined,
+  ReloadOutlined,
+  DeleteOutlined,
+  BellOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
+import ArchitectShell from "@/components/layout/ArchitectShell";
 import ChatInterface from "@/components/chat/ChatInterface";
 import DatabaseModal from "@/components/modals/DatabaseModal";
 import DeleteDatabaseModal from "@/components/modals/DeleteDatabaseModal";
 import SchemaViewer from "@/components/schema";
-import LoadingSpinner from "@/components/ui/loading-spinner";
 import { useDatabase } from "@/contexts/DatabaseContext";
+import { useChat } from "@/contexts/ChatContext";
 import { DatabaseService } from "@/services/database";
-import { useToast } from "@/components/ui/use-toast";
+import { showToast } from "@/lib/notify";
 import { csrfHeaders } from "@/lib/csrf";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { headlineFontFamily } from "@/theme/architectTheme";
 
 const Index = () => {
+  const { resetChat } = useChat();
   const { selectedGraph, graphs, selectGraph, uploadSchema } = useDatabase();
-  const { toast } = useToast();
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSchemaViewer, setShowSchemaViewer] = useState(false);
-  // userRulesSpec is now fetched from the graph database per query
-  const [useMemory, setUseMemory] = useState(() => {
-    // Load from localStorage on init, default to true
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('queryweaver_use_memory');
-      return saved === null ? true : saved === 'true';
+  const [useMemory] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("queryweaver_use_memory");
+      return saved === null ? true : saved === "true";
     }
     return true;
   });
-  const [useRulesFromDatabase, setUseRulesFromDatabase] = useState(() => {
-    // Load from localStorage on init, default to false
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('queryweaver_use_rules_from_database');
-      return saved === null ? false : saved === 'true';
+  const [useRulesFromDatabase] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("queryweaver_use_rules_from_database");
+      return saved === null ? false : saved === "true";
     }
     return false;
   });
   const [isRefreshingSchema, setIsRefreshingSchema] = useState(false);
   const [isChatProcessing, setIsChatProcessing] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  );
-  const [schemaViewerWidth, setSchemaViewerWidth] = useState(() =>
-    typeof window !== "undefined" ? Math.floor(window.innerWidth * 0.4) : 0,
-  );
   const [databaseToDelete, setDatabaseToDelete] = useState<{ id: string; name: string; isDemo: boolean } | null>(null);
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Handle window resize to update layout
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Auto-collapse sidebar when switching to mobile view
-  useEffect(() => {
-    const isMobile = windowWidth < 768;
-    if (isMobile) {
-      setSidebarCollapsed(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth]); // Only run when windowWidth changes, not on manual toggle
-
-  // Calculate sidebar width based on collapsed state
-  // On desktop: sidebar is always visible (64px), on mobile: can be collapsed (0px)
-  const getSidebarWidth = () => {
-    const isMobile = windowWidth < 768;
-    if (isMobile) {
-      return sidebarCollapsed ? 0 : 64;
-    }
-    return 64; // Always visible on desktop
-  };
-  
-  const sidebarWidth = getSidebarWidth();
-  
-  // Calculate main content margin and width
-  // On mobile: ignore schema viewer (it's an overlay), only account for sidebar
-  // On desktop: account for both sidebar and schema viewer
-  const getMainContentStyles = () => {
-    const isMobile = windowWidth < 768;
-
-    if (isMobile) {
-      return {
-        marginLeft: `${sidebarWidth}px`,
-        width: `calc(100% - ${sidebarWidth}px)`
-      };
-    }
-
-    // Desktop
-    const totalOffset = showSchemaViewer ? schemaViewerWidth + sidebarWidth : sidebarWidth;
-    return {
-      marginLeft: `${totalOffset}px`,
-      width: `calc(100% - ${totalOffset}px)`
-    };
-  };
-
-  // No need to fetch rules - we just pass the toggle state to backend
 
   const handleConnectDatabase = () => {
     if (isRefreshingSchema || isChatProcessing) return;
@@ -123,32 +60,26 @@ const Index = () => {
 
     try {
       await uploadSchema(file, file.name.replace(/\.[^/.]+$/, ""));
-      toast({
+      showToast({
         title: "Schema Uploaded",
         description: "Database schema uploaded successfully!",
       });
     } catch (error) {
-      toast({
+      showToast({
         title: "Upload Failed",
         description: error instanceof Error ? error.message : "Failed to upload schema",
         variant: "destructive",
       });
     }
-    
-    // Reset file input
+
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
-  const handleDeleteGraph = async (graphId: string, graphName: string, event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent dropdown from closing/selecting
-    
-    // Check if this is a demo database
-    const isDemo = graphId.startsWith('general_');
-    
+  const handleDeleteGraph = (graphId: string, graphName: string, _e?: React.MouseEvent) => {
+    const isDemo = graphId.startsWith("general_");
     if (isRefreshingSchema) return;
-    // Show the delete confirmation modal
     setDatabaseToDelete({ id: graphId, name: graphName, isDemo });
     setShowDeleteModal(true);
   };
@@ -158,20 +89,15 @@ const Index = () => {
 
     try {
       await DatabaseService.deleteGraph(databaseToDelete.id);
-
-      toast({
+      showToast({
         title: "Database Deleted",
         description: `Successfully deleted "${databaseToDelete.name}"`,
       });
-
-      // Close modal before refresh
       setShowDeleteModal(false);
       setDatabaseToDelete(null);
-
-      // Refresh the graphs list (can be replaced with a context refresh later)
       window.location.reload();
     } catch (error) {
-      toast({
+      showToast({
         title: "Delete Failed",
         description: error instanceof Error ? error.message : "Failed to delete database",
         variant: "destructive",
@@ -181,7 +107,7 @@ const Index = () => {
 
   const handleRefreshSchema = async () => {
     if (!selectedGraph) {
-      toast({
+      showToast({
         title: "No Database Selected",
         description: "Please select a database first",
         variant: "destructive",
@@ -190,7 +116,7 @@ const Index = () => {
     }
 
     if (isChatProcessing) {
-      toast({
+      showToast({
         title: "Chat is Processing",
         description: "Please wait for the current query to complete",
         variant: "destructive",
@@ -201,54 +127,51 @@ const Index = () => {
     try {
       setIsRefreshingSchema(true);
       const response = await fetch(`/graphs/${selectedGraph.id}/refresh`, {
-        method: 'POST',
+        method: "POST",
         headers: {
           ...csrfHeaders(),
         },
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to refresh schema' }));
+        const errorData = await response.json().catch(() => ({ error: "Failed to refresh schema" }));
         throw new Error(errorData.error || `Server error: ${response.status}`);
       }
 
-      // Process streaming response
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error('No response body');
+        throw new Error("No response body");
       }
 
       const decoder = new TextDecoder();
-      let buffer = '';
+      let buffer = "";
       let hasError = false;
-      const delimiter = '|||FALKORDB_MESSAGE_BOUNDARY|||';
+      const delimiter = "|||FALKORDB_MESSAGE_BOUNDARY|||";
 
       while (true) {
         const { done, value } = await reader.read();
-
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
 
-        // Process complete messages
         const parts = buffer.split(delimiter);
-        buffer = parts.pop() || ''; // Keep incomplete part in buffer
+        buffer = parts.pop() || "";
 
         for (const part of parts) {
           const trimmed = part.trim();
           if (!trimmed) continue;
 
           try {
-            const message = JSON.parse(trimmed);
-            if (message.type === 'error') {
+            const msg = JSON.parse(trimmed);
+            if (msg.type === "error") {
               hasError = true;
-              throw new Error(message.message || 'Schema refresh failed');
+              throw new Error(msg.message || "Schema refresh failed");
             }
           } catch (e) {
             if (e instanceof SyntaxError) {
-              console.error('Failed to parse message:', trimmed);
+              console.error("Failed to parse message:", trimmed);
             } else {
               throw e;
             }
@@ -257,223 +180,153 @@ const Index = () => {
       }
 
       if (hasError) {
-        return; // Error already thrown and caught
+        return;
       }
 
-      toast({
+      showToast({
         title: "Schema Refreshed",
         description: "Database schema refreshed successfully!",
       });
-
-      // Reload to show updated schema
       window.location.reload();
     } catch (error) {
-      console.error('Refresh error:', error);
-      toast({
+      console.error("Refresh error:", error);
+      showToast({
         title: "Refresh Failed",
         description: error instanceof Error ? error.message : "Failed to refresh schema",
         variant: "destructive",
       });
-    }
-    finally {
+    } finally {
       setIsRefreshingSchema(false);
     }
   };
 
+  const graphMenuItems: MenuProps["items"] =
+    graphs.length === 0
+      ? [{ key: "empty", label: "No databases available", disabled: true }]
+      : graphs.map((graph) => {
+          const isDemo = graph.id.startsWith("general_");
+          return {
+            key: graph.id,
+            label: (
+              <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                <span data-testid={`database-option-${graph.id}`}>{graph.name}</span>
+                <Button
+                  type="text"
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  data-testid={`delete-graph-btn-${graph.id}`}
+                  disabled={isDemo || isRefreshingSchema || isChatProcessing}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isDemo && !isRefreshingSchema && !isChatProcessing) {
+                      handleDeleteGraph(graph.id, graph.name, e);
+                    }
+                  }}
+                />
+              </Space>
+            ),
+            onClick: () => {
+              if (!isRefreshingSchema && !isChatProcessing) {
+                selectGraph(graph.id);
+              }
+            },
+          };
+        });
+
+  const headerExtra = (
+    <Space wrap size="middle">
+      {selectedGraph ? (
+        <Tag color="success" style={{ margin: 0 }} data-testid="database-status-badge">
+          Connected: {selectedGraph.name}
+        </Tag>
+      ) : (
+        <Tag color="warning" style={{ margin: 0 }} data-testid="database-status-badge">
+          No database selected
+        </Tag>
+      )}
+      <Dropdown menu={{ items: graphMenuItems }} trigger={["click"]} disabled={isRefreshingSchema || isChatProcessing}>
+        <Button icon={<DatabaseOutlined />} data-testid="database-selector-trigger">
+          {selectedGraph?.name || "Select database"}
+        </Button>
+      </Dropdown>
+      <Button
+        icon={isRefreshingSchema ? <Spin size="small" /> : <ReloadOutlined />}
+        onClick={handleRefreshSchema}
+        disabled={!selectedGraph || isRefreshingSchema || isChatProcessing}
+        data-testid="refresh-schema-btn"
+      />
+      <Button type="primary" className="sql-gradient" style={{ border: "none" }} onClick={handleConnectDatabase} disabled={isRefreshingSchema || isChatProcessing} data-testid="connect-database-btn">
+        Connect database
+      </Button>
+      <Button icon={<UploadOutlined />} onClick={handleUploadSchema} data-testid="upload-schema-btn">
+        Upload
+      </Button>
+      <Button type="text" icon={<BellOutlined />} aria-label="Notifications" disabled title="Coming soon" />
+    </Space>
+  );
+
   return (
-    <div className="flex min-h-full flex-1 bg-background overflow-x-hidden">
-      {/* Hidden file input for schema upload */}
+    <>
       <input
         ref={fileInputRef}
         type="file"
         accept=".sql,.csv,.json"
         onChange={handleFileSelect}
-        style={{ display: 'none' }}
+        style={{ display: "none" }}
         data-testid="schema-upload-input"
       />
-      
-      {/* Left Sidebar */}
-      <Sidebar 
-        onSchemaClick={() => { if (!isRefreshingSchema) setShowSchemaViewer(!showSchemaViewer); }}
-        isSchemaOpen={showSchemaViewer}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
-      
-      {/* Schema Viewer */}
-      <SchemaViewer 
-        isOpen={showSchemaViewer}
-        onClose={() => setShowSchemaViewer(false)}
-        onWidthChange={setSchemaViewerWidth}
-        sidebarWidth={sidebarWidth}
-      />
-      
-      {/* Main Content — min-h-0 lets nested flex children shrink so chat scrolls inside the column */}
-      <div
-        className="flex min-h-full flex-1 flex-col overflow-x-hidden transition-all duration-300"
-        style={getMainContentStyles()}
+
+      <ArchitectShell
+        activeNav="workspace"
+        showRightRail
+        headerExtra={headerExtra}
+        onNewAnalysis={resetChat}
+        onOpenDataViewer={() => {
+          if (!isRefreshingSchema) setShowSchemaViewer(true);
+        }}
       >
-        {/* Header */}
-        <header className="shrink-0 border-b border-border">
-          {/* Desktop Header */}
-          <div className="hidden md:flex items-center justify-between p-6">
-            <div className="flex items-center gap-4">
-              <p className="text-sm text-muted-foreground">Graph-Powered Text-to-SQL</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {selectedGraph ? (
-                <Badge variant="default" className="bg-green-600 hover:bg-green-700" data-testid="database-status-badge">
-                  Connected: {selectedGraph.name}
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="bg-yellow-600 hover:bg-yellow-700" data-testid="database-status-badge">
-                  No Database Selected
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile Header */}
-          <div className="md:hidden p-4 space-y-3">
-            {/* Row 1: Hamburger (if collapsed) */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                {sidebarCollapsed && (
-                  <button
-                    onClick={() => setSidebarCollapsed(false)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-all"
-                    data-testid="sidebar-toggle"
-                  >
-                    <PanelLeft className="h-5 w-5" />
-                  </button>
-                )}
-              </div>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#fff" }}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ textAlign: "center", padding: "40px 24px 16px" }}>
+              <Typography.Title
+                level={2}
+                style={{
+                  fontFamily: headlineFontFamily,
+                  fontWeight: 700,
+                  marginBottom: 24,
+                  color: "#1a1c1e",
+                  fontSize: "clamp(1.35rem, 3vw, 2rem)",
+                }}
+              >
+                How can I assist your data architecture today?
+              </Typography.Title>
             </div>
 
-            {/* Row 2: Tagline + Database Status */}
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">Graph-Powered Text-to-SQL</p>
-              {selectedGraph ? (
-                <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-xs px-2 py-0.5 flex-shrink-0">
-                  {selectedGraph.name === 'DEMO_CRM' ? 'CRM' : selectedGraph.name}
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="bg-yellow-600 hover:bg-yellow-700 text-xs px-2 py-0.5 flex-shrink-0">
-                  No DB
-                </Badge>
-              )}
+            <div style={{ flex: 1, minHeight: 0, padding: "0 16px 0", maxWidth: 1200, width: "100%", margin: "0 auto", alignSelf: "stretch" }}>
+              <ChatInterface
+                style={{ minHeight: 0, flex: 1 }}
+                disabled={isRefreshingSchema}
+                onProcessingChange={setIsChatProcessing}
+                useMemory={useMemory}
+                useRulesFromDatabase={useRulesFromDatabase}
+              />
             </div>
-          </div>
-        </header>
-
-        {/* Sub-header for controls */}
-        <div className="shrink-0 border-b border-border px-6 py-4">
-          <div className="flex gap-3 flex-wrap md:flex-nowrap">
-              <Button
-                variant="outline"
-                className="bg-card border-border text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed p-2"
-                onClick={handleRefreshSchema}
-                disabled={!selectedGraph || isRefreshingSchema || isChatProcessing}
-                title={selectedGraph ? (isRefreshingSchema ? 'Refreshing schema...' : isChatProcessing ? 'Wait for query to complete' : 'Refresh Schema') : "Select a database first"}
-                data-testid="refresh-schema-btn"
-              >
-                {isRefreshingSchema ? <LoadingSpinner size="sm" /> : <RefreshCw className="w-4 h-4" />}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="bg-card border-border text-muted-foreground hover:bg-muted flex-1 md:flex-initial"
-                    disabled={isRefreshingSchema || isChatProcessing}
-                    title={isRefreshingSchema ? 'Refreshing schema...' : isChatProcessing ? 'Wait for query to complete' : undefined}
-                    data-testid="database-selector-trigger"
-                  >
-                    <span className="truncate">{selectedGraph?.name || 'Select Database'}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="bg-card border-border text-foreground">
-                  {graphs.map((graph) => {
-                    const isDemo = graph.id.startsWith('general_');
-                    return (
-                      <DropdownMenuItem
-                        key={graph.id}
-                        className="hover:!bg-muted flex items-center justify-between group"
-                        onClick={() => { if (!isRefreshingSchema && !isChatProcessing) selectGraph(graph.id); }}
-                        disabled={isRefreshingSchema || isChatProcessing}
-                        data-testid={`database-option-${graph.id}`}
-                      >
-                        <span>{graph.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={`h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${
-                            isDemo || isRefreshingSchema || isChatProcessing ? 'cursor-not-allowed opacity-40' : 'hover:bg-red-600 hover:text-white'
-                          }`}
-                          onClick={(e) => { if (isDemo || isRefreshingSchema || isChatProcessing) return; handleDeleteGraph(graph.id, graph.name, e); }}
-                          disabled={isDemo || isRefreshingSchema}
-                          title={isDemo ? 'Demo databases cannot be deleted' : (isRefreshingSchema ? 'Refreshing schema...' : `Delete ${graph.name}`)}
-                          data-testid={`delete-graph-btn-${graph.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuItem>
-                    );
-                  })}
-                  {graphs.length === 0 && (
-                    <DropdownMenuItem disabled className="text-muted-foreground">
-                      No databases available
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                variant="outline"
-                className="bg-purple-600 border-purple-500 text-white hover:bg-purple-700 hover:border-purple-600 hover:text-white flex-1 md:flex-initial shadow-sm hover:shadow-md transition-all"
-                onClick={handleConnectDatabase}
-                disabled={isRefreshingSchema || isChatProcessing}
-                title={isRefreshingSchema ? 'Refreshing schema...' : isChatProcessing ? 'Wait for query to complete' : undefined}
-                data-testid="connect-database-btn"
-              >
-                  <span className="hidden sm:inline">Connect to Database</span>
-                  <span className="sm:hidden">Connect DB</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="bg-card border-border text-muted-foreground opacity-60 cursor-not-allowed hidden md:flex"
-                disabled
-                title="Upload schema feature coming soon"
-                onClick={(e) => e.preventDefault()}
-                data-testid="upload-schema-btn"
-              >
-                  Upload Schema
-              </Button>
           </div>
         </div>
-        
-        {/* Chat — h-full + min-h-0 so grid/flex children get a definite height */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
-          <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col overflow-x-hidden md:px-[15px]">
-            <ChatInterface
-              className="min-h-0 flex-1"
-              disabled={isRefreshingSchema}
-              onProcessingChange={setIsChatProcessing}
-              useMemory={useMemory}
-              useRulesFromDatabase={useRulesFromDatabase}
-            />
-          </div>
-        </div>
-      </div>
+      </ArchitectShell>
 
-      {/* Modals */}
+      <SchemaViewer isOpen={showSchemaViewer} onClose={() => setShowSchemaViewer(false)} />
+
       <DatabaseModal open={showDatabaseModal} onOpenChange={setShowDatabaseModal} />
-      <DeleteDatabaseModal 
-        open={showDeleteModal} 
+      <DeleteDatabaseModal
+        open={showDeleteModal}
         onOpenChange={setShowDeleteModal}
-        databaseName={databaseToDelete?.name || ''}
+        databaseName={databaseToDelete?.name || ""}
         onConfirm={confirmDeleteGraph}
         isDemo={databaseToDelete?.isDemo || false}
       />
-    </div>
+    </>
   );
 };
 

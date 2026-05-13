@@ -26,14 +26,6 @@ export class Sidebar extends HomePage {
     return this.page.getByTestId("schema-button");
   }
 
-  private get docsLink(): Locator {
-    return this.page.getByTestId("documentation-link");
-  }
-
-  private get supportBtn(): Locator {
-    return this.page.getByTestId("support-link");
-  }
-
   private get schemaPanel(): Locator {
     return this.page.getByTestId("schema-panel");
   }
@@ -58,18 +50,6 @@ export class Sidebar extends HomePage {
     return this.schemaBtn;
   }
 
-  private async interactWithDocsLink(): Promise<Locator> {
-    const isVisible = await waitForElementToBeVisible(this.docsLink);
-    if (!isVisible) throw new Error("Documentation link is not visible!");
-    return this.docsLink;
-  }
-
-  private async interactWithSupportBtn(): Promise<Locator> {
-    const isVisible = await waitForElementToBeVisible(this.supportBtn);
-    if (!isVisible) throw new Error("Support link is not visible!");
-    return this.supportBtn;
-  }
-
   // ==================== LAYER 3: HIGH-LEVEL ACTIONS ====================
 
   async clickOnSidebarToggle(): Promise<void> {
@@ -87,16 +67,6 @@ export class Sidebar extends HomePage {
     await element.click();
   }
 
-  async clickOnDocumentationLink(): Promise<void> {
-    const element = await this.interactWithDocsLink();
-    await element.click();
-  }
-
-  async clickOnSupportLink(): Promise<void> {
-    const element = await this.interactWithSupportBtn();
-    await element.click();
-  }
-
   // ==================== VERIFICATION METHODS ====================
 
   async isSidebarToggleVisible(): Promise<boolean> {
@@ -109,24 +79,6 @@ export class Sidebar extends HomePage {
 
   async isSchemaButtonVisible(): Promise<boolean> {
     return await waitForElementToBeVisible(this.schemaBtn);
-  }
-
-  async isDocumentationLinkVisible(): Promise<boolean> {
-    return await waitForElementToBeVisible(this.docsLink);
-  }
-
-  async isSupportLinkVisible(): Promise<boolean> {
-    return await waitForElementToBeVisible(this.supportBtn);
-  }
-
-  async getDocumentationLinkHref(): Promise<string | null> {
-    const element = await this.interactWithDocsLink();
-    return await element.getAttribute('href');
-  }
-
-  async getSupportLinkHref(): Promise<string | null> {
-    const element = await this.interactWithSupportBtn();
-    return await element.getAttribute('href');
   }
 
   async getCurrentTheme(): Promise<string | null> {

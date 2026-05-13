@@ -15,6 +15,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from api.routes.graphs import graphs_router
 from api.routes.database import database_router
+from api.routes.history import history_router
 from api.routes.settings import settings_router
 
 load_dotenv()
@@ -54,6 +55,7 @@ def create_app():  # pylint: disable=too-many-statements
     # Include routers
     app.include_router(graphs_router, prefix="/graphs")
     app.include_router(database_router)
+    app.include_router(history_router)
     app.include_router(settings_router, prefix="/api")
 
     # Control MCP endpoints via environment variable DISABLE_MCP
@@ -98,6 +100,10 @@ def create_app():  # pylint: disable=too-many-statements
             {
                 "name": "Database Connection",
                 "description": "Connect to external databases",
+            },
+            {
+                "name": "History",
+                "description": "Stored natural-language query history per session",
             },
         ],
         routes=routes,

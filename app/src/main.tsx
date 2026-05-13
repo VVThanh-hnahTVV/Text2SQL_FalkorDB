@@ -2,18 +2,16 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-// Initialize theme on page load
+// Theme flag for canvas / legacy viewers (light-first Architect UI)
 try {
   const savedTheme = localStorage.getItem("theme");
-  // Normalize: only accept "light" or "dark", default to "dark"
-  const theme = (savedTheme === "light" || savedTheme === "dark") ? savedTheme : "dark";
+  const theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : "light";
   document.documentElement.setAttribute("data-theme", theme);
-  // Update localStorage if we normalized the value
   if (savedTheme !== theme) {
     localStorage.setItem("theme", theme);
   }
 } catch {
-  document.documentElement.setAttribute("data-theme", "dark");
+  document.documentElement.setAttribute("data-theme", "light");
 }
 
 const rootElement = document.getElementById("root");

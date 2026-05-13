@@ -4,7 +4,8 @@ set -e
 
 # Set default values if not set
 FALKORDB_HOST="${FALKORDB_HOST:-localhost}"
-FALKORDB_PORT="${FALKORDB_PORT:-6379}"
+# FalkorDB in this project’s Docker image listens on 6380; override (e.g. 6379) when using plain redis/falkordb maps.
+FALKORDB_PORT="${FALKORDB_PORT:-6380}"
 
 # Start FalkorDB Redis server in background
 redis-server --loadmodule /var/lib/falkordb/bin/falkordb.so | cat &

@@ -49,9 +49,7 @@ const ChatInterface = ({
   const footerInsetRight = screens.xl ? SHELL_RAIL_WIDTH : 0;
 
   const scrollToBottom = () => {
-    const el = chatContainerRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   };
 
   const LoadingMessage = () => (
@@ -87,6 +85,7 @@ const ChatInterface = ({
     "What are the pending orders?",
   ];
 
+  // Scroll to bottom whenever messages list or processing state changes
   useEffect(() => {
     scrollToBottom();
   }, [messages, isProcessing]);
@@ -95,19 +94,16 @@ const ChatInterface = ({
     onProcessingChange?.(isProcessing);
   }, [isProcessing, onProcessingChange]);
 
+  // Measure the fixed footer height so paddingBottom keeps content above it
   useEffect(() => {
     const el = inputFooterRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-
-    const measure = () => {
-      setFooterHeight(el.getBoundingClientRect().height);
-    };
-
+    const measure = () => setFooterHeight(Math.ceil(el.getBoundingClientRect().height));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [messages.length, isProcessing, selectedGraph?.id, demoRole, screens.md, screens.xl]);
+  }, []);
 
   const handleSendMessage = async (query: string) => {
     if (isProcessing || disabled) return;
@@ -124,8 +120,6 @@ const ChatInterface = ({
     const historySnapshot = [...conversationHistory.current];
     const started = Date.now();
 
-    setIsProcessing(true);
-
     const userMessage: ChatMessageData = {
       id: Date.now().toString(),
       type: "user",
@@ -134,9 +128,8 @@ const ChatInterface = ({
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    setIsProcessing(true);
     conversationHistory.current.push({ role: "user", content: query });
-
-    setTimeout(() => scrollToBottom(), 100);
 
     showToast({
       title: "Processing Query",
@@ -228,8 +221,6 @@ const ChatInterface = ({
         } else {
           console.warn("Unknown message type received:", message.type, message);
         }
-
-        setTimeout(() => scrollToBottom(), 50);
       }
 
       if (sqlQuery !== undefined || Object.keys(analysisInfo).length > 0) {
@@ -314,7 +305,6 @@ const ChatInterface = ({
       });
     } finally {
       setIsProcessing(false);
-      setTimeout(() => scrollToBottom(), 100);
     }
   };
 
@@ -420,8 +410,6 @@ const ChatInterface = ({
           };
           setMessages((prev) => [...prev, refreshMessage]);
         }
-
-        setTimeout(() => scrollToBottom(), 50);
       }
 
       if (queryResults && queryResults.length > 0) {
@@ -470,7 +458,6 @@ const ChatInterface = ({
       });
     } finally {
       setIsProcessing(false);
-      setTimeout(() => scrollToBottom(), 100);
     }
   };
 

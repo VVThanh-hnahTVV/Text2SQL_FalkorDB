@@ -53,11 +53,13 @@ COPY --from=frontend /build/dist ./app/dist
 RUN uv sync --frozen --no-dev
 
 COPY start.sh /start.sh
-RUN chmod +x /start.sh
+# Strip CRLF if the file was saved on Windows — avoids "exec /start.sh: no such file or directory"
+RUN sed -i 's/\r$//' /start.sh && chmod +x /start.sh
 
 LABEL org.opencontainers.image.title="QueryWeaver" \
       org.opencontainers.image.description="Text-to-SQL with graph schema (FastAPI + React)"
 
 EXPOSE 5000 6379
 
-ENTRYPOINT ["/start.sh"]
+# Invoke via bash so we do not rely on shebang + kernel exec (CRLF-safe on top of sed above).
+ENTRYPOINT ["/bin/bash", "/start.sh"]

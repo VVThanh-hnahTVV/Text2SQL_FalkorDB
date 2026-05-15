@@ -1,0 +1,2 @@
+# Shell entrypoints must use LF so Linux shebang / exec work (e.g. Render Docker).
+*.sh text eol=lf

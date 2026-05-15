@@ -12,6 +12,8 @@ if url is None:
         db = FalkorDB(host="localhost", port=6379)
     except Exception as e: 
         raise ConnectionError(f"Failed to connect to FalkorDB: {e}") from e
+    finally:
+        print("**********FalkorDB connected to port 6380**********")
 else:
     # Ensure the URL is properly encoded as string and handle potential encoding issues
     try:
@@ -23,3 +25,5 @@ else:
         db = FalkorDB(connection_pool=pool)
     except Exception as e:
         raise ConnectionError(f"Failed to connect to FalkorDB with URL: {e}") from e
+    finally:
+        print("**********FalkorDB connected to port 6380**********")

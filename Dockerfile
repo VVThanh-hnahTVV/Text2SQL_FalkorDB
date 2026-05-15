@@ -61,5 +61,7 @@ LABEL org.opencontainers.image.title="QueryWeaver" \
 
 EXPOSE 5000 6379
 
-# Invoke via bash so we do not rely on shebang + kernel exec (CRLF-safe on top of sed above).
+# Clear FalkorDB base CMD (redis-server …) so it is not appended as args to our entrypoint (Render/Docker
+# would run: bash /start.sh redis-server --loadmodule … otherwise).
 ENTRYPOINT ["/bin/bash", "/start.sh"]
+CMD []

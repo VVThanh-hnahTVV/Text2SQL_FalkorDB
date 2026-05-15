@@ -1,6 +1,7 @@
 #!/bin/bash
 set -eo pipefail
 
+echo "QueryWeaver start: pid=$$ argv=$*"
 
 # Set default values if not set
 FALKORDB_HOST="${FALKORDB_HOST:-localhost}"

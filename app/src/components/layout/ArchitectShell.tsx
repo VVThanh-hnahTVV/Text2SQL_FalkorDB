@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Layout, Menu, Button, Typography, Drawer, Grid, Space, Tag, Avatar } from "antd";
 import {
   AppstoreOutlined,
@@ -18,6 +18,16 @@ const { Sider, Header, Content } = Layout;
 
 const LEFT_WIDTH = 256;
 const RIGHT_WIDTH = 280;
+
+/** Brand wordmark: “Query” (indigo–violet, data side) + “Mind” (cyan, neural side). */
+function AppBrandText({ style }: { style?: CSSProperties }) {
+  return (
+    <span style={style}>
+      <span style={{ color: "#5b4fcf" }}>Query</span>
+      <span style={{ color: "#00b8d4" }}>Mind</span>
+    </span>
+  );
+}
 
 function SiderFooterLinks() {
   const [theme, setTheme] = useState(() => {
@@ -128,32 +138,23 @@ const ArchitectShell = ({
       }}
     >
       <div style={{ padding: 24, display: "flex", alignItems: "center", gap: 12 }}>
-        <div
-          className="sql-gradient"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ color: "#fff", fontSize: 22 }}>
-            architecture
-          </span>
-        </div>
+        <img
+          src="/logo.png"
+          alt="QueryMind"
+          width={40}
+          height={40}
+          style={{ borderRadius: 8, objectFit: "contain", flexShrink: 0 }}
+        />
         <div>
           <Typography.Title
             level={5}
             style={{
               margin: 0,
               fontFamily: headlineFontFamily,
-              color: "#24389c",
               fontWeight: 700,
             }}
           >
-            QueryWeaver
+            <AppBrandText />
           </Typography.Title>
           <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 500 }}>
             Database IDE
@@ -276,15 +277,8 @@ const ArchitectShell = ({
                 aria-label="Open menu"
               />
             )}
-            <Typography.Text
-              strong
-              style={{
-                fontFamily: headlineFontFamily,
-                color: "#24389c",
-                fontSize: 18,
-              }}
-            >
-              QueryWeaver
+            <Typography.Text strong style={{ fontFamily: headlineFontFamily, fontSize: 18 }}>
+              <AppBrandText />
             </Typography.Text>
             {showVersionBadge ? (
               <Tag

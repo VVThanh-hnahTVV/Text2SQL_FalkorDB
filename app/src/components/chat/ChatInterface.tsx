@@ -215,7 +215,7 @@ const ChatInterface = ({
     if (!selectedGraph) {
       showToast({
         title: "No Database Available",
-        description: "Please upload a database schema first, or start the QueryWeaver backend to use real databases.",
+        description: "Please upload a database schema first, or start the QueryMind backend to use real databases.",
         variant: "destructive",
       });
       return;

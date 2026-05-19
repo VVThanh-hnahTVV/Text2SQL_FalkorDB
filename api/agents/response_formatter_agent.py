@@ -75,11 +75,11 @@ class ResponseFormatterAgent:
 
         messages = [{"role": "user", "content": prompt}]
 
-        # response = run_completion(
-        #     messages, self.custom_model, self.custom_api_key,
-        #     temperature=0.3  # Slightly higher temperature for more natural responses
-        # )
-        response = "test"
+        response = run_completion(
+            messages, self.custom_model, self.custom_api_key,
+            temperature=0.3  # Slightly higher temperature for more natural responses
+        )
+        # response = "test"
         return response.strip()
 
     def _build_response_prompt(self, user_query: str, sql_query: str,

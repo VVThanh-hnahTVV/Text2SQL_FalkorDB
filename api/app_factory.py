@@ -153,6 +153,14 @@ def create_app():  # pylint: disable=too-many-statements
             return FileResponse(favicon_path, media_type="image/x-icon")
         return JSONResponse({"error": "Favicon not found"}, status_code=404)
 
+    @app.get("/logo.png", include_in_schema=False)
+    async def logo_png():
+        """Serve app logo from dist (SPA catch-all would otherwise return HTML for /logo.png)."""
+        logo_path = os.path.join(dist_path, "logo.png")
+        if os.path.exists(logo_path):
+            return FileResponse(logo_path, media_type="image/png")
+        return JSONResponse({"error": "Logo not found"}, status_code=404)
+
     @app.exception_handler(Exception)
     async def handle_unexpected_error(
         request: Request, exc: Exception

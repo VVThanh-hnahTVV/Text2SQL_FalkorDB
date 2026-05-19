@@ -14,6 +14,8 @@ if url is None:
         db = FalkorDB(host=_host, port=_port)
     except Exception as e:
         raise ConnectionError(f"Failed to connect to FalkorDB: {e}") from e
+    # finally:
+    #     print("**********FalkorDB connected to port 6380**********")
 else:
     try:
         pool = BlockingConnectionPool.from_url(

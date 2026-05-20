@@ -9,7 +9,7 @@ from redis.asyncio import BlockingConnectionPool
 url = os.getenv("FALKORDB_URL", None)
 if url is None:
     _host = os.getenv("FALKORDB_HOST", "localhost")
-    _port = int(os.getenv("FALKORDB_PORT", "6379"))
+    _port = int(os.getenv("FALKORDB_PORT", "6380"))
     try:
         db = FalkorDB(host=_host, port=_port)
     except Exception as e:

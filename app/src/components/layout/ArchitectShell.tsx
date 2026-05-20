@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState, useRef, useLayoutEffect, type CSSProperties } from "react";
 import { Layout, Menu, Button, Typography, Drawer, Grid, Space, Tag, Avatar, Flex } from "antd";
 import {
   AppstoreOutlined,
@@ -111,7 +111,28 @@ const ArchitectShell = ({
   const showDesktopSider = screens.md;
   const showDesktopRightRail = showRightRail && screens.xl;
   const showRailDrawer = showRightRail && !screens.xl;
-  const headerHeight = screens.md ? SHELL_HEADER_HEIGHT : SHELL_HEADER_HEIGHT_MOBILE;
+  const isMobileHeader = !showDesktopSider;
+  const headerRef = useRef<HTMLElement>(null);
+  const [mobileHeaderHeight, setMobileHeaderHeight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isMobileHeader) {
+      setMobileHeaderHeight(null);
+      return;
+    }
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const measure = () => {
+      setMobileHeaderHeight(Math.ceil(el.getBoundingClientRect().height));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isMobileHeader, headerExtra, showRailDrawer, headerContext, showVersionBadge]);
+
+  const headerHeight = showDesktopSider ? SHELL_HEADER_HEIGHT : (mobileHeaderHeight ?? SHELL_HEADER_HEIGHT_MOBILE);
   const headerPadX = screens.md ? 24 : 12;
 
   const menuItems = [
@@ -261,6 +282,7 @@ const ArchitectShell = ({
         }}
       >
         <Header
+          ref={headerRef}
           style={{
             position: "fixed",
             top: 0,
@@ -268,9 +290,12 @@ const ArchitectShell = ({
             right: showDesktopRightRail ? SHELL_RIGHT_WIDTH : 0,
             zIndex: 50,
             paddingInline: headerPadX,
+            paddingBlock: isMobileHeader ? 8 : 0,
             borderBottom: "1px solid #e0e3e6",
             background: "#f7f9fc",
-            height: headerHeight,
+            height: isMobileHeader ? "auto" : headerHeight,
+            minHeight: isMobileHeader ? SHELL_HEADER_HEIGHT_MOBILE : headerHeight,
+            boxSizing: "border-box",
           }}
         >
           <div className="shell-header-inner">
@@ -290,7 +315,9 @@ const ArchitectShell = ({
                 style={{
                   fontFamily: headlineFontFamily,
                   fontSize: screens.md ? 18 : 16,
-                  maxWidth: screens.sm ? 200 : 120,
+                  ...(showDesktopSider
+                    ? { maxWidth: screens.sm ? 200 : 120 }
+                    : { flex: 1, minWidth: 0, maxWidth: "100%" }),
                 }}
               >
                 <AppBrandText />

@@ -154,7 +154,7 @@ const WorkspaceHeaderActions = ({
     };
 
     return (
-      <Space size="small" wrap={false}>
+      <Space size="small" wrap>
         {statusTag}
         {databaseDropdown}
         {refreshBtn}

@@ -329,9 +329,13 @@ async def query_database(  # pylint: disable=too-many-statements
         # Start both tasks concurrently
         find_task = asyncio.create_task(find(graph_id, queries_history, db_description))
 
-        relevancy_task = asyncio.create_task(agent_rel.get_answer(
-            queries_history[-1], db_description
-        ))
+        relevancy_task = asyncio.create_task(
+            agent_rel.get_answer(
+                queries_history[-1],
+                db_description,
+                demo_role=chat_data.role,
+            )
+        )
 
         logging.info("Starting relevancy check and graph analysis concurrently")
 

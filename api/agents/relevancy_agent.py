@@ -51,66 +51,80 @@ def build_session_summary(
 
 
 RELEVANCY_PROMPT = """
-You are an expert assistant tasked with determining whether the user's question is relevant (translatable into a database query). 
-You are given:
-- The user's latest question: {QUESTION_PLACEHOLDER}
-- The database description: {DB_PLACEHOLDER}
-- **Session summary (prior turns):**
-{SESSION_SUMMARY_PLACEHOLDER}
+You decide whether the user’s question fits this **text-to-SQL product**: could it reasonably become SQL
+(or a brief clarification then SQL) against the **given** database description and conversation so far?
 
-- The conversation history (previous questions and answers) is also provided in this chat as structured messages.
+Inputs:
+- Latest user question: {QUESTION_PLACEHOLDER}
+- Database description (schema/context): {DB_PLACEHOLDER}
+- **Session summary (prior turns only):**
+{SESSION_SUMMARY_PLACEHOLDER}
+- Older turns also appear as structured user/assistant messages in this chat.
+
+**Status meanings**
+- **On-topic**: The intent concerns this data domain and maps to SQL on this schema—including
+  **SELECT/aggregates, INSERT, UPDATE, DELETE, MERGE/UPSERT, and DDL** (CREATE/ALTER/DROP/TRUNCATE,
+  etc.) when clearly about this database. Short follow-ups (e.g. a year, “same for 2025”, “tiếp tục”)
+  stay **On-topic** if prior turns already fixed the subject.
+- **Off-topic**: Unrelated small talk, questions about the AI/model itself, clearly outside this
+  business/schema, **or** (only if a separate **“viewer (read-only)”** block appears **later in this same
+  message**) write/modify/schema-change requests that that block tells you to reject.
+- **Inappropriate**: abusive, illegal, or clearly policy-violating content.
+
+**Critical:** Do **not** set **Off-topic** *only* because the user wants to **insert, update, delete, or
+change schema**—unless this **same** user message contains that later **viewer (read-only)** block.
+Do **not** justify **Off-topic** by calling yourself a “read-only assistant” or “only retrieving data”
+when no such viewer block is present.
 
 Guidelines:
 
-1. **Always use the full conversation context** when deciding relevance, not just the latest question.
-   - Use the **session summary** and the chat messages together: short follow-ups (e.g. a year, "same but for 2025", "tiếp tục") are **on-topic** if prior turns already established a database-related intent (metrics, uninstalls, date ranges, etc.).
-   - If earlier in the chat the system asked for missing information (e.g., "What's your name or ID?") and the user provided it, then the current question should be treated as valid and on-topic.
-   - Consider whether ambiguities have already been resolved in prior turns.
+1. **Use the full conversation**, not just the last sentence. If the assistant asked for missing info
+   and the user answered, the next message is on-topic.
 
-2. **Focus on actionable intent for database querying.**
-   - Ask yourself: "Can this request, given the conversation so far, be answered by querying the database?"
-   - Personal pronouns ("I", "my", "me") are on-topic if the user has identified themselves or if the intent clearly maps to database data.
-   - Conversational or casual phrasing is fine as long as the underlying request is for data.
+2. **Actionable database intent** — pronouns and casual wording are fine when scope maps to the schema.
 
-3. **On-topic cases include:**
-   - Questions that can be translated into database queries (directly or with previously provided clarifications).
-   - Personal queries where the user provided their identity after being asked.
-   - Questions about data, database structure, reports, metrics, or insights.
+3. **Off-topic (general)** — unrelated topics, meta questions about the system, private data about
+   people clearly outside this database, or inappropriate content (use **Inappropriate** for the last).
 
-4. **Off-topic cases include:**
-   - Completely unrelated to data/business information,
-   - Questions about the AI/system itself,
-   - Requests for private information about people outside the database,
-   - Offensive, illegal, or guideline-violating content.
+Output exactly **one** JSON object (no extra prose outside it):
 
-Output format:
-
-• On-topic and appropriate:
+On-topic:
 {{
 "status": "On-topic",
-"reason": "Brief explanation of why it can be translated to a database query.",
+"reason": "Brief why this maps to SQL on this schema.",
 "suggestions": []
 }}
 
-• Off-topic:
+Off-topic:
 {{
 "status": "Off-topic",
-"reason": "Short reason why it cannot be translated to a database query.",
-"suggestions": [
-"An alternative, high-level question about the schema..."
-]
+"reason": "Brief why it is outside the data domain, or cite viewer-only rule if that block applies.",
+"suggestions": ["One concrete alternative question about this schema."]
 }}
 
-• Inappropriate:
+Inappropriate:
 {{
 "status": "Inappropriate",
-"reason": "Short reason why it is inappropriate.",
-"suggestions": [
-"Suggested topics that would be more appropriate..."
-]
+"reason": "Brief why it is inappropriate.",
+"suggestions": ["Safer topics aligned with this schema."]
 }}
 
-Remember: **Prioritize the conversation’s actionable data intent over phrasing style. If missing info (like identity) was provided earlier in the chat, treat the question as on-topic.**
+Remember: prioritize **data intent over phrasing**; **writes/DDL are on-topic** when they target this
+database **unless** a later **viewer (read-only)** section in this same message overrides that.
+"""
+
+# When demo role is "viewer", destructive / write intents must be Off-topic (read-only demo).
+VIEWER_RELEVANCY_SUFFIX = """
+
+**Demo session role: viewer (read-only).** Apply this **in addition** to the rules above:
+- If the user’s **primary intent** is to **change data or database objects**—including natural-language
+  equivalents of INSERT, UPDATE, DELETE, MERGE, UPSERT, TRUNCATE, DROP, CREATE (tables/indexes/views/etc.),
+  ALTER, RENAME, GRANT/REVOKE, or bulk “remove / wipe / clear / xóa hết / cập nhật / thêm dòng” when it
+  means modifying stored data or schema—respond with **status "Off-topic"** and a short reason (do **not**
+  use "On-topic" for those requests).
+- **Stay On-topic** for read-only asks: SELECT-style questions, counts, filters, reports, metrics,
+  browsing schema **without** changing it, and follow-ups that only refine a prior read-only request.
+- Questions that are abusive/illegal still use **"Inappropriate"** as before.
 """
 
 
@@ -119,24 +133,38 @@ class RelevancyAgent(BaseAgent):
     """Agent for determining relevancy of queries to database schema."""
 
 
-    async def get_answer(self, user_question: str, database_desc: dict) -> dict:
+    def _is_viewer_demo_role(self, demo_role: Optional[str]) -> bool:
+        """True when client sent demo role viewer (read-only); unknown/omit treated as not viewer."""
+        if demo_role is None:
+            return False
+        return str(demo_role).strip().lower() == "viewer"
+
+    async def get_answer(
+        self,
+        user_question: str,
+        database_desc: dict,
+        demo_role: Optional[str] = None,
+    ) -> dict:
         """Get relevancy assessment for user question against database description."""
         logger.debug("Relevancy agent question=%r database_desc=%s", user_question, database_desc)
         session_summary = build_session_summary(
             self.queries_history, self.result_history
         )
+        base_prompt = RELEVANCY_PROMPT.format(
+            QUESTION_PLACEHOLDER=user_question,
+            DB_PLACEHOLDER=json.dumps(database_desc),
+            SESSION_SUMMARY_PLACEHOLDER=session_summary,
+        )
+        if self._is_viewer_demo_role(demo_role):
+            base_prompt = base_prompt + VIEWER_RELEVANCY_SUFFIX
+
         self.messages.append(
             {
                 "role": "user",
-                "content": RELEVANCY_PROMPT.format(
-                    QUESTION_PLACEHOLDER=user_question,
-                    DB_PLACEHOLDER=json.dumps(database_desc),
-                    SESSION_SUMMARY_PLACEHOLDER=session_summary,
-                ),
+                "content": base_prompt,
             }
         )
 
-        # Temporary bypass: always treat as On-topic.
         answer = run_completion(
             self.messages, self.custom_model, self.custom_api_key, temperature=0
         )

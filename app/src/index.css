@@ -216,6 +216,7 @@ h3,
 
 @media (max-width: 767px) {
   :root {
+    /* Base row height; ArchitectShell measures the real header for content offset. */
     --shell-header-height: 56px;
     --page-padding-x: 12px;
     --page-padding-y: 24px;
@@ -247,6 +248,25 @@ h3,
   gap: 8px;
   min-width: 0;
   width: 100%;
+}
+
+@media (max-width: 767px) {
+  .shell-header-inner {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 8px;
+  }
+
+  .shell-header-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .shell-header-actions.ant-space {
+    width: 100%;
+  }
 }
 
 .shell-header-brand {

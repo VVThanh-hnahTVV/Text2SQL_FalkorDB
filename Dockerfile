@@ -32,6 +32,7 @@ USER root
 RUN apt-get update \
     && apt-get install -f -y \
     && apt-get install -y --no-install-recommends \
+        bash \
         netcat-openbsd \
         ca-certificates \
         build-essential \

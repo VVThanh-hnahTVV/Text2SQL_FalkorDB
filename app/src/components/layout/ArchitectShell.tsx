@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from "react";
-import { Layout, Menu, Button, Typography, Drawer, Grid, Space, Tag, Avatar } from "antd";
+import { Layout, Menu, Button, Typography, Drawer, Grid, Space, Tag, Avatar, Flex } from "antd";
 import {
   AppstoreOutlined,
   HistoryOutlined,
@@ -9,15 +9,19 @@ import {
   MenuOutlined,
   MoonOutlined,
   SunOutlined,
+  UnorderedListOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import { headlineFontFamily } from "@/theme/architectTheme";
 import ChatRightRail from "./ChatRightRail";
+import {
+  SHELL_HEADER_HEIGHT,
+  SHELL_HEADER_HEIGHT_MOBILE,
+  SHELL_LEFT_WIDTH,
+  SHELL_RIGHT_WIDTH,
+} from "./shellLayout";
 
 const { Sider, Header, Content } = Layout;
-
-const LEFT_WIDTH = 256;
-const RIGHT_WIDTH = 280;
 
 /** Brand wordmark: “Query” (indigo–violet, data side) + “Mind” (cyan, neural side). */
 function AppBrandText({ style }: { style?: CSSProperties }) {
@@ -102,6 +106,13 @@ const ArchitectShell = ({
   const location = useLocation();
   const screens = Grid.useBreakpoint();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileRailOpen, setMobileRailOpen] = useState(false);
+
+  const showDesktopSider = screens.md;
+  const showDesktopRightRail = showRightRail && screens.xl;
+  const showRailDrawer = showRightRail && !screens.xl;
+  const headerHeight = screens.md ? SHELL_HEADER_HEIGHT : SHELL_HEADER_HEIGHT_MOBILE;
+  const headerPadX = screens.md ? 24 : 12;
 
   const menuItems = [
     { key: "workspace", icon: <AppstoreOutlined />, label: "Workspace", path: "/" },
@@ -211,13 +222,11 @@ const ArchitectShell = ({
     </div>
   );
 
-  const showDesktopSider = screens.md;
-
   return (
     <Layout style={{ minHeight: "100vh", background: "#fff" }}>
       {showDesktopSider ? (
         <Sider
-          width={LEFT_WIDTH}
+          width={SHELL_LEFT_WIDTH}
           theme="light"
           style={{
             background: "#f2f4f7",
@@ -235,7 +244,7 @@ const ArchitectShell = ({
       ) : (
         <Drawer
           placement="left"
-          width={LEFT_WIDTH}
+          width={SHELL_LEFT_WIDTH}
           onClose={() => setMobileNavOpen(false)}
           open={mobileNavOpen}
           styles={{ body: { padding: 0 } }}
@@ -246,7 +255,7 @@ const ArchitectShell = ({
 
       <Layout
         style={{
-          marginLeft: showDesktopSider ? LEFT_WIDTH : 0,
+          marginLeft: showDesktopSider ? SHELL_LEFT_WIDTH : 0,
           minHeight: "100vh",
           transition: "margin-left 0.2s",
         }}
@@ -255,95 +264,132 @@ const ArchitectShell = ({
           style={{
             position: "fixed",
             top: 0,
-            left: showDesktopSider ? LEFT_WIDTH : 0,
-            right: showRightRail && screens.xl ? RIGHT_WIDTH : 0,
+            left: showDesktopSider ? SHELL_LEFT_WIDTH : 0,
+            right: showDesktopRightRail ? SHELL_RIGHT_WIDTH : 0,
             zIndex: 50,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            paddingInline: 24,
+            paddingInline: headerPadX,
             borderBottom: "1px solid #e0e3e6",
             background: "#f7f9fc",
-            height: 64,
-            lineHeight: "64px",
+            height: headerHeight,
           }}
         >
-          <Space size="middle" align="center">
-            {!showDesktopSider && (
-              <Button
-                type="text"
-                icon={<MenuOutlined />}
-                onClick={() => setMobileNavOpen(true)}
-                aria-label="Open menu"
-              />
-            )}
-            <Typography.Text strong style={{ fontFamily: headlineFontFamily, fontSize: 18 }}>
-              <AppBrandText />
-            </Typography.Text>
-            {showVersionBadge ? (
-              <Tag
+          <div className="shell-header-inner">
+            <Flex align="center" gap={8} className="shell-header-brand" wrap={false}>
+              {!showDesktopSider && (
+                <Button
+                  type="text"
+                  icon={<MenuOutlined />}
+                  onClick={() => setMobileNavOpen(true)}
+                  aria-label="Open menu"
+                />
+              )}
+              <Typography.Text
+                strong
+                ellipsis
+                className="shell-header-title"
                 style={{
-                  margin: 0,
-                  background: "#dee0ff",
-                  color: "#24389c",
-                  borderColor: "rgba(36, 56, 156, 0.12)",
-                  fontWeight: 700,
-                  fontSize: 10,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
+                  fontFamily: headlineFontFamily,
+                  fontSize: screens.md ? 18 : 16,
+                  maxWidth: screens.sm ? 200 : 120,
                 }}
               >
-                {versionLabel}
-              </Tag>
-            ) : null}
-            {headerContext != null && headerContext !== false ? (
-              <>
-                <div
-                  aria-hidden
-                  style={{ width: 1, height: 16, background: "#e0e3e6", flexShrink: 0, alignSelf: "center" }}
+                <AppBrandText />
+              </Typography.Text>
+              {showVersionBadge ? (
+                <Tag
+                  className="shell-version-badge"
+                  style={{
+                    margin: 0,
+                    background: "#dee0ff",
+                    color: "#24389c",
+                    borderColor: "rgba(36, 56, 156, 0.12)",
+                    fontWeight: 700,
+                    fontSize: 10,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    flexShrink: 0,
+                  }}
+                >
+                  {versionLabel}
+                </Tag>
+              ) : null}
+              {headerContext != null && headerContext !== false ? (
+                <>
+                  <div
+                    aria-hidden
+                    className="shell-header-context"
+                    style={{ width: 1, height: 16, background: "#e0e3e6", flexShrink: 0 }}
+                  />
+                  <Typography.Text
+                    className="shell-header-context"
+                    ellipsis
+                    style={{ fontSize: 14, fontWeight: 500, color: "#64748b", margin: 0, maxWidth: 180 }}
+                  >
+                    {headerContext}
+                  </Typography.Text>
+                </>
+              ) : null}
+            </Flex>
+            <Space size="small" wrap className="shell-header-actions">
+              {showRailDrawer ? (
+                <Button
+                  type="text"
+                  icon={<UnorderedListOutlined />}
+                  onClick={() => setMobileRailOpen(true)}
+                  aria-label="Open chat outline"
                 />
-                <Typography.Text style={{ fontSize: 14, fontWeight: 500, color: "#64748b", margin: 0 }}>
-                  {headerContext}
-                </Typography.Text>
-              </>
-            ) : null}
-          </Space>
-          <Space wrap>{headerExtra}</Space>
+              ) : null}
+              {headerExtra}
+            </Space>
+          </div>
         </Header>
 
         <Layout
           style={{
             background: "#fff",
-            marginRight: showRightRail && screens.xl ? RIGHT_WIDTH : 0,
+            marginRight: showDesktopRightRail ? SHELL_RIGHT_WIDTH : 0,
             minHeight: "100vh",
-            paddingTop: 64,
+            paddingTop: headerHeight,
           }}
         >
           <Content style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
             {children}
           </Content>
 
-          {showRightRail && screens.xl ? (
+          {showDesktopRightRail ? (
             <Sider
-              width={RIGHT_WIDTH}
+              width={SHELL_RIGHT_WIDTH}
               theme="light"
               style={{
                 position: "fixed",
                 right: 0,
-                top: 64,
-                height: "calc(100vh - 64px)",
+                top: headerHeight,
+                height: `calc(100vh - ${headerHeight}px)`,
                 borderLeft: "1px solid #e0e3e6",
                 background: "#ffffff",
                 overflow: "auto",
                 zIndex: 40,
               }}
             >
-              <div style={{ padding: 24 }} className="custom-scrollbar">
+              <div style={{ padding: screens.md ? 24 : 16 }} className="custom-scrollbar">
                 <ChatRightRail />
               </div>
             </Sider>
           ) : null}
         </Layout>
+
+        {showRailDrawer ? (
+          <Drawer
+            title="Chat outline"
+            placement="right"
+            width={Math.min(SHELL_RIGHT_WIDTH, typeof window !== "undefined" ? window.innerWidth - 24 : SHELL_RIGHT_WIDTH)}
+            open={mobileRailOpen}
+            onClose={() => setMobileRailOpen(false)}
+            styles={{ body: { padding: 16 } }}
+          >
+            <ChatRightRail />
+          </Drawer>
+        ) : null}
       </Layout>
     </Layout>
   );

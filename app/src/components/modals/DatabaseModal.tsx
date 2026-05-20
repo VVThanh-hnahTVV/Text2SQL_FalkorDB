@@ -8,6 +8,7 @@ import {
   Typography,
   Flex,
   Spin,
+  Grid,
 } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from "@ant-design/icons";
 import { useDatabase } from "@/contexts/DatabaseContext";
@@ -26,6 +27,7 @@ interface ConnectionStep {
 }
 
 const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
+  const screens = Grid.useBreakpoint();
   const [connectionMode, setConnectionMode] = useState<"url" | "manual">("url");
   const [selectedDatabase, setSelectedDatabase] = useState("");
   const [connectionUrl, setConnectionUrl] = useState("");
@@ -239,7 +241,8 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
       open={open}
       onCancel={() => onOpenChange(false)}
       footer={null}
-      width={520}
+      width={screens.md ? 520 : "calc(100vw - 32px)"}
+      style={{ maxWidth: 520, top: screens.md ? undefined : 16 }}
       destroyOnClose={false}
       data-testid="database-modal"
     >

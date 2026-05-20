@@ -34,6 +34,8 @@ export interface ChatRequest {
 export interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
+  /** Last generated SQL for this assistant turn (refinement context). */
+  sql?: string;
 }
 
 // Streaming response types

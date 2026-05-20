@@ -638,7 +638,7 @@ const ChatMessage = ({
     const isHighRisk = ["DELETE", "DROP", "TRUNCATE"].includes(operationType);
 
     return (
-      <div style={{ padding: "0 24px" }} data-testid="confirmation-message">
+      <div className="chat-message-wrap" data-testid="confirmation-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
           <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -729,11 +729,11 @@ const ChatMessage = ({
 
   if (type === "user") {
     return (
-      <div style={{ padding: "0 24px" }} data-testid="user-message">
+      <div className="chat-message-wrap" data-testid="user-message">
         <Flex justify="flex-end" gap={12} align="start" style={{ marginBottom: 24 }}>
           <Card
+            className="user-message-bubble"
             style={{
-              maxWidth: 560,
               background: "rgba(222, 224, 255, 0.45)",
               borderColor: "rgba(63, 81, 181, 0.15)",
               borderRadius: 16,
@@ -755,7 +755,7 @@ const ChatMessage = ({
     const isValid = analysisInfo?.isValid !== false;
 
     return (
-      <div style={{ padding: "0 24px" }} data-testid="sql-query-message">
+      <div className="chat-message-wrap" data-testid="sql-query-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
           <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -839,7 +839,7 @@ const ChatMessage = ({
 
   if (type === "query-result") {
     return (
-      <div style={{ padding: "0 24px" }} data-testid="query-results-message">
+      <div className="chat-message-wrap" data-testid="query-results-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
           <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
           <div style={{ flex: 1, minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
@@ -864,7 +864,7 @@ const ChatMessage = ({
 
   if (type === "ai") {
     return (
-      <div style={{ padding: "0 24px" }} data-testid="ai-message">
+      <div className="chat-message-wrap" data-testid="ai-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
           <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
           <div style={{ flex: 1, minWidth: 0, borderLeft: "4px solid #3f51b5", paddingLeft: 16 }}>
@@ -877,7 +877,7 @@ const ChatMessage = ({
 
   if (type === "ai-steps") {
     return (
-      <div style={{ padding: "0 24px" }}>
+      <div className="chat-message-wrap">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
           <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
           <div style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>

@@ -1,18 +1,11 @@
 import { useState, useRef } from "react";
-import { Button, Dropdown, Space, Tag, Typography, Spin } from "antd";
-import type { MenuProps } from "antd";
-import {
-  DatabaseOutlined,
-  ReloadOutlined,
-  DeleteOutlined,
-  BellOutlined,
-  UploadOutlined,
-} from "@ant-design/icons";
+import { Typography } from "antd";
 import ArchitectShell from "@/components/layout/ArchitectShell";
+import SchemaViewer from "@/components/schema";
+import WorkspaceHeaderActions from "@/components/layout/WorkspaceHeaderActions";
 import ChatInterface from "@/components/chat/ChatInterface";
 import DatabaseModal from "@/components/modals/DatabaseModal";
 import DeleteDatabaseModal from "@/components/modals/DeleteDatabaseModal";
-import SchemaViewer from "@/components/schema";
 import { useDatabase } from "@/contexts/DatabaseContext";
 import { useChat } from "@/contexts/ChatContext";
 import { DatabaseService } from "@/services/database";
@@ -200,70 +193,18 @@ const Index = () => {
     }
   };
 
-  const graphMenuItems: MenuProps["items"] =
-    graphs.length === 0
-      ? [{ key: "empty", label: "No databases available", disabled: true }]
-      : graphs.map((graph) => {
-          const isDemo = graph.id.startsWith("general_");
-          return {
-            key: graph.id,
-            label: (
-              <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                <span data-testid={`database-option-${graph.id}`}>{graph.name}</span>
-                <Button
-                  type="text"
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  data-testid={`delete-graph-btn-${graph.id}`}
-                  disabled={isDemo || isRefreshingSchema || isChatProcessing}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isDemo && !isRefreshingSchema && !isChatProcessing) {
-                      handleDeleteGraph(graph.id, graph.name, e);
-                    }
-                  }}
-                />
-              </Space>
-            ),
-            onClick: () => {
-              if (!isRefreshingSchema && !isChatProcessing) {
-                selectGraph(graph.id);
-              }
-            },
-          };
-        });
-
   const headerExtra = (
-    <Space wrap size="middle">
-      {selectedGraph ? (
-        <Tag color="success" style={{ margin: 0 }} data-testid="database-status-badge">
-          Connected: {selectedGraph.name}
-        </Tag>
-      ) : (
-        <Tag color="warning" style={{ margin: 0 }} data-testid="database-status-badge">
-          No database selected
-        </Tag>
-      )}
-      <Dropdown menu={{ items: graphMenuItems }} trigger={["click"]} disabled={isRefreshingSchema || isChatProcessing}>
-        <Button icon={<DatabaseOutlined />} data-testid="database-selector-trigger">
-          {selectedGraph?.name || "Select database"}
-        </Button>
-      </Dropdown>
-      <Button
-        icon={isRefreshingSchema ? <Spin size="small" /> : <ReloadOutlined />}
-        onClick={handleRefreshSchema}
-        disabled={!selectedGraph || isRefreshingSchema || isChatProcessing}
-        data-testid="refresh-schema-btn"
-      />
-      <Button type="primary" className="sql-gradient" style={{ border: "none" }} onClick={handleConnectDatabase} disabled={isRefreshingSchema || isChatProcessing} data-testid="connect-database-btn">
-        Connect database
-      </Button>
-      <Button icon={<UploadOutlined />} onClick={handleUploadSchema} data-testid="upload-schema-btn">
-        Upload
-      </Button>
-      <Button type="text" icon={<BellOutlined />} aria-label="Notifications" disabled title="Coming soon" />
-    </Space>
+    <WorkspaceHeaderActions
+      selectedGraph={selectedGraph}
+      graphs={graphs}
+      isRefreshingSchema={isRefreshingSchema}
+      isChatProcessing={isChatProcessing}
+      onSelectGraph={selectGraph}
+      onDeleteGraph={(id, name) => handleDeleteGraph(id, name)}
+      onRefreshSchema={() => void handleRefreshSchema()}
+      onConnectDatabase={handleConnectDatabase}
+      onUploadSchema={handleUploadSchema}
+    />
   );
 
   return (
@@ -288,7 +229,7 @@ const Index = () => {
       >
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#fff" }}>
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ textAlign: "center", padding: "40px 24px 16px" }}>
+            <div className="workspace-hero" style={{ textAlign: "center", padding: "var(--page-padding-y) var(--page-padding-x) 16px" }}>
               <Typography.Title
                 level={2}
                 style={{
@@ -311,7 +252,7 @@ const Index = () => {
                 display: "flex",
                 flexDirection: "column",
                 overflow: "hidden",
-                padding: "0 16px 0",
+                padding: "0 var(--page-padding-x) 0",
                 maxWidth: 1200,
                 width: "100%",
                 margin: "0 auto",

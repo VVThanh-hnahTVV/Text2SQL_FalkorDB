@@ -14,9 +14,7 @@ import { getVendorPrefix } from "@/utils/vendorConfig";
 import { getOrInitDemoRole, setDemoRole, type DemoRole } from "@/lib/demoRole";
 import { showToast } from "@/lib/notify";
 
-/** Match `ArchitectShell` so fixed footer clears sider / right rail. */
-const SHELL_NAV_WIDTH = 256;
-const SHELL_RAIL_WIDTH = 280;
+import { SHELL_LEFT_WIDTH, SHELL_RIGHT_WIDTH } from "@/components/layout/shellLayout";
 
 /** Brave/Chromium: wheel over non-scrollable descendants may not scroll this ancestor — handle explicitly. */
 function isNestedVerticalScroller(node: HTMLElement, stopAt: HTMLElement): boolean {
@@ -65,8 +63,8 @@ const ChatInterface = ({
   const screens = Grid.useBreakpoint();
   const [demoRole, setDemoRoleState] = useState<DemoRole>(() => getOrInitDemoRole());
 
-  const footerInsetLeft = screens.md ? SHELL_NAV_WIDTH : 0;
-  const footerInsetRight = screens.xl ? SHELL_RAIL_WIDTH : 0;
+  const footerInsetLeft = screens.md ? SHELL_LEFT_WIDTH : 0;
+  const footerInsetRight = screens.xl ? SHELL_RIGHT_WIDTH : 0;
 
   /** Use `"auto"` by default: smooth scroll often misses the true bottom when layout keeps changing (skeleton, new blocks). */
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
@@ -119,7 +117,7 @@ const ChatInterface = ({
   }, []);
 
   const LoadingMessage = () => (
-    <div style={{ padding: "0 24px" }}>
+    <div className="chat-message-wrap">
       <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
         <div
           className="sql-gradient"
@@ -646,6 +644,7 @@ const ChatInterface = ({
 
       <div
         ref={inputFooterRef}
+        className="chat-input-footer"
         style={{
           position: "fixed",
           bottom: 0,
@@ -654,7 +653,6 @@ const ChatInterface = ({
           zIndex: 45,
           borderTop: "1px solid #e0e3e6",
           background: "#fff",
-          padding: "16px 16px 24px",
           boxSizing: "border-box",
         }}
       >
@@ -662,7 +660,7 @@ const ChatInterface = ({
           <Flex align="center" gap={12} wrap="wrap" style={{ marginBottom: 16 }}>
             <Typography.Text type="secondary">Demo role</Typography.Text>
             <Select
-              style={{ width: 220 }}
+              className="demo-role-select"
               value={demoRole}
               onChange={(v: DemoRole) => {
                 setDemoRole(v);

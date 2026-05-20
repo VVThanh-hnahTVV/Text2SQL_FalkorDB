@@ -170,7 +170,7 @@ const Settings = () => {
         headerExtra={headerExtra}
         onOpenDataViewer={() => setShowSchemaViewer(true)}
       >
-        <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+        <div className="page-container page-container--narrow">
           <Flex align="center" gap={16} style={{ marginBottom: 24, flexWrap: "wrap" }}>
             <Button icon={<ArrowLeftOutlined />} onClick={() => void handleBackClick()}>
               Back

@@ -197,3 +197,223 @@ h3,
   background: #f8fafc;
   font-weight: 600;
 }
+
+/* —— Responsive layout (ArchitectShell, chat, pages) —— */
+:root {
+  --shell-header-height: 64px;
+  --shell-nav-width: 256px;
+  --shell-rail-width: 280px;
+  --page-padding-x: 24px;
+  --page-padding-y: 40px;
+  --chat-message-pad-x: 24px;
+}
+
+@media (max-width: 1199px) {
+  :root {
+    --shell-rail-width: 0px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --shell-header-height: 56px;
+    --page-padding-x: 12px;
+    --page-padding-y: 24px;
+    --chat-message-pad-x: 12px;
+  }
+}
+
+.page-container {
+  width: 100%;
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: var(--page-padding-y) var(--page-padding-x) 48px;
+  box-sizing: border-box;
+}
+
+.page-container--narrow {
+  max-width: 900px;
+}
+
+.chat-message-wrap {
+  padding: 0 var(--chat-message-pad-x);
+  box-sizing: border-box;
+}
+
+.shell-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.shell-header-brand {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shell-header-title.ant-typography {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.shell-header-brand .shell-version-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+
+.shell-header-actions {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shell-hide-mobile {
+  display: contents;
+}
+
+.shell-show-mobile {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .shell-hide-mobile {
+    display: none !important;
+  }
+
+  .shell-show-mobile {
+    display: flex;
+  }
+
+  .shell-header-context {
+    display: none;
+  }
+
+  .shell-version-badge {
+    display: none;
+  }
+}
+
+@media (max-width: 575px) {
+  .workspace-status-tag {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+}
+
+.chat-input-footer {
+  padding: 12px var(--page-padding-x) 20px;
+}
+
+@media (min-width: 768px) {
+  .chat-input-footer {
+    padding: 16px 16px 24px;
+  }
+}
+
+.demo-role-select {
+  width: 220px;
+  max-width: 100%;
+}
+
+@media (max-width: 575px) {
+  .demo-role-select {
+    width: 100%;
+  }
+
+  .workspace-hero .ant-typography {
+    margin-bottom: 16px !important;
+  }
+}
+
+.user-message-bubble {
+  max-width: min(560px, 100%);
+}
+
+/* Data Viewer — ER diagram drawer (fixed height, no infinite scroll) */
+.schema-viewer-drawer .ant-drawer-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.schema-viewer-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.schema-viewer-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.schema-viewer-meta {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e0e3e6;
+}
+
+.schema-viewer-state {
+  flex: 1;
+  min-height: 200px;
+}
+
+.schema-diagram-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.schema-diagram-toolbar {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e3e6;
+}
+
+.schema-diagram-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.schema-diagram-canvas-wrap falkordb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.schema-diagram-canvas-wrap--interactive {
+  cursor: grab;
+}
+
+.schema-diagram-canvas-wrap--interactive:active {
+  cursor: grabbing;
+}
+
+.schema-diagram-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+}

@@ -13,6 +13,7 @@ import type { ConfirmRequest } from "@/types/api";
 import { getVendorPrefix } from "@/utils/vendorConfig";
 import { getOrInitDemoRole, setDemoRole, type DemoRole } from "@/lib/demoRole";
 import { showToast } from "@/lib/notify";
+import { APP_LOGO_URL } from "@/lib/appLogo";
 
 import { SHELL_LEFT_WIDTH, SHELL_RIGHT_WIDTH } from "@/components/layout/shellLayout";
 
@@ -119,23 +120,22 @@ const ChatInterface = ({
   const LoadingMessage = () => (
     <div className="chat-message-wrap">
       <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-        <div
-          className="sql-gradient"
+        <img
+          src={APP_LOGO_URL}
+          alt="QueryMind"
+          width={32}
+          height={32}
+          decoding="async"
           style={{
+            flexShrink: 0,
             width: 32,
             height: 32,
             borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: 700,
-            flexShrink: 0,
+            objectFit: "contain",
+            display: "block",
+            background: "#fff",
           }}
-        >
-          QW
-        </div>
+        />
         <Flex vertical gap={8} style={{ flex: 1, minWidth: 0 }}>
           <Skeleton active title={{ width: "60%" }} paragraph={{ rows: 2 }} />
         </Flex>

@@ -34,6 +34,7 @@ import {
 } from '@/lib/avaAdvisor';
 import { buildG2Spec } from '@/lib/g2Spec';
 import { downloadQueryResultsCsv } from '@/lib/exportCsv';
+import { APP_LOGO_URL } from '@/lib/appLogo';
 import { showToast } from '@/lib/notify';
 interface Step {
   icon: 'search' | 'database' | 'code' | 'message';
@@ -66,6 +67,28 @@ interface ChatMessageProps {
 }
 
 type VisualizationData = NonNullable<ChatMessageProps['visualizationData']>;
+
+/** Assistant / system messages: app logo (plain img so a failed load never shows text fallback). */
+function AppAssistantAvatar() {
+  return (
+    <img
+      src={APP_LOGO_URL}
+      alt="QueryMind"
+      width={32}
+      height={32}
+      decoding="async"
+      style={{
+        flexShrink: 0,
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        objectFit: 'contain',
+        display: 'block',
+        background: '#fff',
+      }}
+    />
+  );
+}
 
 const OPTIONAL_NONE_VALUE = '__none__';
 
@@ -640,7 +663,7 @@ const ChatMessage = ({
     return (
       <div className="chat-message-wrap" data-testid="confirmation-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <AppAssistantAvatar />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Card
               style={{
@@ -757,7 +780,7 @@ const ChatMessage = ({
     return (
       <div className="chat-message-wrap" data-testid="sql-query-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <AppAssistantAvatar />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Card
               styles={{ body: { padding: 0 } }}
@@ -841,7 +864,7 @@ const ChatMessage = ({
     return (
       <div className="chat-message-wrap" data-testid="query-results-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <AppAssistantAvatar />
           <div style={{ flex: 1, minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
             <Card styles={{ body: { padding: 16 } }} style={{ borderColor: "rgba(0, 110, 28, 0.25)", maxWidth: "100%" }}>
               {queryData && queryData.length > 0 ? (
@@ -866,7 +889,7 @@ const ChatMessage = ({
     return (
       <div className="chat-message-wrap" data-testid="ai-message">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <AppAssistantAvatar />
           <div style={{ flex: 1, minWidth: 0, borderLeft: "4px solid #3f51b5", paddingLeft: 16 }}>
             <AiMarkdownContent content={content} />
           </div>
@@ -879,7 +902,7 @@ const ChatMessage = ({
     return (
       <div className="chat-message-wrap">
         <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-          <Avatar style={{ background: "#3f51b5", color: "#fff", flexShrink: 0 }}>QW</Avatar>
+          <AppAssistantAvatar />
           <div style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
             <Card styles={{ body: { padding: 16 } }} style={{ borderColor: "rgba(63, 81, 181, 0.25)" }}>
               <Space direction="vertical" size={12} style={{ width: "100%" }}>

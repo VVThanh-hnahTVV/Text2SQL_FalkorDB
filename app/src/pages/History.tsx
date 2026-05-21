@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Avatar, Button, Dropdown, Flex, Grid, Input, Space, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { BellOutlined, DatabaseOutlined } from "@ant-design/icons";
 import ArchitectShell from "@/components/layout/ArchitectShell";
+import { QueryResultBody } from "@/components/chat/ChatMessage";
 import SchemaViewer from "@/components/schema";
 import { HistoryService } from "@/services/history";
-import type { QueryHistoryItem as ApiHistoryItem } from "@/types/api";
+import type { QueryHistoryItem as ApiHistoryItem, QueryHistoryReplayResponse } from "@/types/api";
 import { headlineFontFamily } from "@/theme/architectTheme";
 import { showToast } from "@/lib/notify";
 
@@ -14,6 +15,7 @@ type QueryStatus = "verified" | "error";
 
 interface HistoryQueryItem {
   id: string;
+  graphId: string;
   intent: string;
   status: QueryStatus;
   timing: string;
@@ -35,6 +37,7 @@ function mapApiToRow(h: ApiHistoryItem): HistoryQueryItem {
   const isErr = h.status === "error";
   return {
     id: h.id,
+    graphId: h.graph_id,
     intent: h.intent,
     status: isErr ? "error" : "verified",
     timing: isErr ? "Execution failed" : formatTimingMs(h.timing_ms),
@@ -63,7 +66,21 @@ const listHeaderLabelStyle: CSSProperties = {
   color: "#64748b",
 };
 
-function HistoryQueryRow({ row, compact }: { row: HistoryQueryItem; compact: boolean }) {
+function HistoryQueryRow({
+  row,
+  compact,
+  expanded,
+  replay,
+  replayLoading,
+  onViewResults,
+}: {
+  row: HistoryQueryItem;
+  compact: boolean;
+  expanded: boolean;
+  replay: QueryHistoryReplayResponse | null;
+  replayLoading: boolean;
+  onViewResults: () => void;
+}) {
   const isError = row.status === "error";
 
   const iconWrap = (
@@ -159,12 +176,17 @@ function HistoryQueryRow({ row, compact }: { row: HistoryQueryItem; compact: boo
     <Button
       className={isError ? "history-action-btn history-action-btn--err" : "history-action-btn history-action-btn--ok"}
       style={{ fontWeight: 700, borderRadius: 2 }}
-      onClick={() =>
-        showToast({
-          title: isError ? "Details" : "Results",
-          description: "Opening saved results will use the history API when it is wired up.",
-        })
-      }
+      loading={!isError && replayLoading}
+      onClick={() => {
+        if (isError) {
+          showToast({
+            title: "Details",
+            description: row.errorBadge ?? "This query failed during execution.",
+          });
+          return;
+        }
+        onViewResults();
+      }}
     >
       {isError ? (
         <>
@@ -175,14 +197,45 @@ function HistoryQueryRow({ row, compact }: { row: HistoryQueryItem; compact: boo
         </>
       ) : (
         <>
-          View Results
+          {expanded ? "Hide Results" : "View Results"}
           <span className="material-symbols-outlined" style={{ fontSize: 16, marginLeft: 6, verticalAlign: "middle" }}>
-            arrow_forward
+            {expanded ? "expand_less" : "arrow_forward"}
           </span>
         </>
       )}
     </Button>
   );
+
+  const resultsPanel =
+    expanded && !isError ? (
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 16,
+          borderTop: "1px solid #e2e8f0",
+        }}
+      >
+        {replayLoading ? (
+          <Flex justify="center" style={{ padding: 24 }}>
+            <Spin />
+          </Flex>
+        ) : replay ? (
+          <>
+            <Typography.Paragraph
+              type="secondary"
+              style={{ fontSize: 12, marginBottom: 12, fontFamily: "monospace" }}
+              copyable={{ text: replay.sql_query }}
+            >
+              {replay.sql_query}
+            </Typography.Paragraph>
+            <QueryResultBody
+              queryData={replay.data}
+              visualizationData={{ should_visualize: replay.should_visualize }}
+            />
+          </>
+        ) : null}
+      </div>
+    ) : null;
 
   const cardShellStyle: CSSProperties = {
     padding: 24,
@@ -213,6 +266,7 @@ function HistoryQueryRow({ row, compact }: { row: HistoryQueryItem; compact: boo
           {dateBlock}
           {tagsBlock}
           <div>{actionBtn}</div>
+          {resultsPanel}
         </Flex>
       </div>
     );
@@ -246,6 +300,7 @@ function HistoryQueryRow({ row, compact }: { row: HistoryQueryItem; compact: boo
       <div style={{ gridColumn: "span 2" }}>{dateBlock}</div>
       <div style={{ gridColumn: "span 2" }}>{tagsBlock}</div>
       <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end" }}>{actionBtn}</div>
+      {expanded ? <div style={{ gridColumn: "1 / -1" }}>{resultsPanel}</div> : null}
     </div>
   );
 }
@@ -257,8 +312,38 @@ const History = () => {
   const [rows, setRows] = useState<HistoryQueryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [replayById, setReplayById] = useState<Record<string, QueryHistoryReplayResponse>>({});
+  const [replayLoadingId, setReplayLoadingId] = useState<string | null>(null);
   const screens = Grid.useBreakpoint();
   const compact = !screens.md;
+
+  const handleViewResults = useCallback(
+    async (row: HistoryQueryItem) => {
+      if (expandedId === row.id) {
+        setExpandedId(null);
+        return;
+      }
+      setExpandedId(row.id);
+      if (replayById[row.id]) return;
+
+      setReplayLoadingId(row.id);
+      try {
+        const payload = await HistoryService.replay(row.id);
+        setReplayById((prev) => ({ ...prev, [row.id]: payload }));
+      } catch (e) {
+        setExpandedId(null);
+        showToast({
+          title: "Could not load results",
+          description: e instanceof Error ? e.message : "Unknown error",
+          variant: "destructive",
+        });
+      } finally {
+        setReplayLoadingId(null);
+      }
+    },
+    [expandedId, replayById],
+  );
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchApplied(searchInput), 400);
@@ -473,7 +558,17 @@ const History = () => {
 
             <Flex vertical gap={16}>
               {!loading
-                ? rows.map((row) => <HistoryQueryRow key={row.id} row={row} compact={compact} />)
+                ? rows.map((row) => (
+                    <HistoryQueryRow
+                      key={row.id}
+                      row={row}
+                      compact={compact}
+                      expanded={expandedId === row.id}
+                      replay={replayById[row.id] ?? null}
+                      replayLoading={replayLoadingId === row.id}
+                      onViewResults={() => void handleViewResults(row)}
+                    />
+                  ))
                 : null}
             </Flex>
           </div>

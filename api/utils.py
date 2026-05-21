@@ -1,10 +1,13 @@
 """Utility functions for the text2sql API."""
 import json
-from typing import Dict, List, Optional, TypedDict
+import logging
+from typing import Any, Dict, List, Optional, TypedDict
 
 from litellm import completion, batch_completion
 
 from api.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class ForeignKeyInfo(TypedDict):
@@ -33,6 +36,32 @@ class TableInfo(TypedDict):
     col_descriptions: List[str]
 
 
+def _normalize_description(desc: str) -> str:
+    """Collapse whitespace in table/column descriptions."""
+    return " ".join((desc or "").split())
+
+
+def _is_meaningful_table_description(desc: str, table_name: str) -> bool:
+    """True when description likely came from DB comments or enrichment (not a placeholder)."""
+    normalized = _normalize_description(desc)
+    if not normalized:
+        return False
+    placeholders = {table_name, f"Table: {table_name}"}
+    return normalized not in placeholders and len(normalized) > 20
+
+
+def _extract_completion_content(batch_response: Any) -> str:
+    """Read assistant text from a litellm completion/batch_completion item."""
+    try:
+        message = batch_response.choices[0].message
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        return (content or "").strip()
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return ""
+
+
 def create_combined_description(  # pylint: disable=too-many-locals
     table_info: Dict[str, TableInfo], batch_size: int = 10
 ) -> Dict[str, TableInfo]:
@@ -50,6 +79,7 @@ def create_combined_description(  # pylint: disable=too-many-locals
 
     messages_list = []
     table_keys = []
+    prior_descriptions: Dict[str, str] = {}
 
     system_prompt = (
         "You are a database table description generator. "
@@ -65,6 +95,14 @@ def create_combined_description(  # pylint: disable=too-many-locals
     )
 
     for table_name, table_prop in table_info.items():
+        prior = _normalize_description(table_prop.get("description", ""))
+        prior_descriptions[table_name] = prior
+
+        # Keep Postgres COMMENT ON TABLE / enrichment; skip LLM overwrite when already rich.
+        if _is_meaningful_table_description(prior, table_name):
+            table_info[table_name]["description"] = prior
+            continue
+
         # The col_descriptions property is duplicated in the schema (columns has it)
         table_prop = table_prop.copy()
         table_prop.pop("col_descriptions", None)
@@ -89,7 +127,7 @@ def create_combined_description(  # pylint: disable=too-many-locals
             model=Config.COMPLETION_MODEL,
             messages=batch_messages,
             temperature=0,
-            max_tokens=50,
+            max_tokens=150,
         )
 
         for offset, batch_response in enumerate(response):
@@ -97,12 +135,32 @@ def create_combined_description(  # pylint: disable=too-many-locals
             if table_index >= len(table_keys):
                 break
             table_name = table_keys[table_index]
+            prior = prior_descriptions.get(table_name, "")
             if isinstance(batch_response, Exception):
-                table_info[table_name]["description"] = table_name
-            else:
-                content = batch_response.choices[0].message["content"].strip()
-                table_info[table_name]["description"] = content
+                logger.warning(
+                    "LLM batch failed for table %s: %s; keeping prior description",
+                    table_name,
+                    batch_response,
+                )
+                table_info[table_name]["description"] = prior or table_name
+                continue
 
+            content = _extract_completion_content(batch_response)
+            if content:
+                table_info[table_name]["description"] = content
+            else:
+                logger.warning(
+                    "LLM returned empty table description for %s; keeping prior",
+                    table_name,
+                )
+                table_info[table_name]["description"] = prior or table_name
+            print("Utils: create_combined_description table_info", table_info)
+    for table_name, table_info in table_info.items():
+        print("Utils: create_combined_description table_info['description']", table_info['description'])
+        print("Utils: create_combined_description table_info['columns']", table_info['columns'])
+        print("Utils: create_combined_description table_info['foreign_keys']", table_info['foreign_keys'])
+        print("Utils: create_combined_description table_info['col_descriptions']", table_info['col_descriptions'])
+        print("Utils: create_combined_description table_info['row_count']", table_info['row_count'])
     return table_info
 
 def generate_db_description(
@@ -175,6 +233,5 @@ def generate_db_description(
         stop=None,
     )
     # print("Utils: generate_db_description response", response)
-    description = response.choices[0].message["content"]
-    print("Utils: generate_db_description description", description)
+    description = _extract_completion_content(response)
     return description

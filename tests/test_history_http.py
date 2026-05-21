@@ -9,6 +9,7 @@ from api.app_factory import create_app
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("QUERYWEAVER_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("QUERYWEAVER_HISTORY_BACKEND", "file")
     monkeypatch.setenv("DISABLE_MCP", "true")
     return TestClient(create_app())
 

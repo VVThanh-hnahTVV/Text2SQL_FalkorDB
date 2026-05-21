@@ -131,3 +131,13 @@ export interface QueryHistoryRecordCreate {
   error_kind?: string | null;
 }
 
+/** GET /history/{id}/replay — re-execute SQL from FalkorDB memory (no LLM). */
+export interface QueryHistoryReplayResponse {
+  graph_id: string;
+  intent: string;
+  sql_query: string;
+  data: Record<string, unknown>[];
+  should_visualize: boolean;
+  db_description?: string;
+}
+

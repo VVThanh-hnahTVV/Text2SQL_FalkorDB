@@ -1,4 +1,4 @@
-"""File-backed query history keyed by session / anonymous user id (X-User-Id)."""
+"""Query history store — FalkorDB (default) or local JSON files (tests / fallback)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 _MAX_ENTRIES_PER_USER = int(os.environ.get("QUERYWEAVER_HISTORY_MAX", "2000"))
 _GLOBAL_LOCK = Lock()
 _USER_LOCKS: dict[str, Lock] = {}
+
+
+def _use_falkor() -> bool:
+    backend = os.environ.get("QUERYWEAVER_HISTORY_BACKEND", "falkor").strip().lower()
+    return backend not in ("file", "local", "json")
 
 
 def _project_data_root() -> Path:
@@ -63,7 +68,7 @@ def _save_unlocked(path: Path, entries: list[dict[str, Any]]) -> None:
     path.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
 
 
-def list_entries(
+async def list_entries(
     memory_user_id: str,
     *,
     limit: int = 50,
@@ -72,12 +77,22 @@ def list_entries(
     q: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Return newest-first slice and total after filters."""
+    if _use_falkor():
+        from api.core import falkor_history_store
+
+        return await falkor_history_store.list_entries(
+            memory_user_id,
+            limit=limit,
+            offset=offset,
+            graph_id=graph_id,
+            q=q,
+        )
+
     path = _user_file(memory_user_id)
     lk = _user_lock(str(path))
     with lk:
         entries = _load_unlocked(path)
 
-    # stored oldest-first; present newest-first
     rev = list(reversed(entries))
 
     if graph_id:
@@ -103,8 +118,32 @@ def list_entries(
     return page, total
 
 
-def append_entry(memory_user_id: str, entry: dict[str, Any]) -> dict[str, Any]:
-    """Append one history row (newest at end of file). Returns stored row including id."""
+async def get_entry_by_id(memory_user_id: str, entry_id: str) -> dict[str, Any] | None:
+    """Return a single history row by id, or None if not found."""
+    if _use_falkor():
+        from api.core import falkor_history_store
+
+        return await falkor_history_store.get_entry_by_id(memory_user_id, entry_id)
+
+    if not entry_id or not str(entry_id).strip():
+        return None
+    path = _user_file(memory_user_id)
+    lk = _user_lock(str(path))
+    with lk:
+        entries = _load_unlocked(path)
+    for row in reversed(entries):
+        if str(row.get("id")) == str(entry_id).strip():
+            return dict(row)
+    return None
+
+
+async def append_entry(memory_user_id: str, entry: dict[str, Any]) -> dict[str, Any]:
+    """Append one history row. Returns stored row including id."""
+    if _use_falkor():
+        from api.core import falkor_history_store
+
+        return await falkor_history_store.append_entry(memory_user_id, entry)
+
     path = _user_file(memory_user_id)
     lk = _user_lock(str(path))
     row = {
@@ -120,3 +159,23 @@ def append_entry(memory_user_id: str, entry: dict[str, Any]) -> dict[str, Any]:
             entries = entries[-_MAX_ENTRIES_PER_USER:]
         _save_unlocked(path, entries)
     return row
+
+
+async def update_entry_sql(
+    memory_user_id: str,
+    *,
+    graph_id: str,
+    intent: str,
+    sql_query: str,
+) -> None:
+    """Attach SQL to the newest matching history row (FalkorDB only)."""
+    if not _use_falkor():
+        return
+    from api.core import falkor_history_store
+
+    await falkor_history_store.update_entry_sql(
+        memory_user_id,
+        graph_id=graph_id,
+        intent=intent,
+        sql_query=sql_query,
+    )

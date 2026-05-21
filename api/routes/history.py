@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.core.query_history_store import append_entry, list_entries
+from api.core.errors import GraphNotFoundError, InvalidArgumentError
+from api.core.history_replay import replay_history_query
+from api.core.query_history_store import append_entry, get_entry_by_id, list_entries
 from api.routes.graphs import _resolve_memory_user_id
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ async def get_history(
 ):
     """List query history for the current session user (newest first)."""
     memory_user_id = _resolve_memory_user_id(request)
-    items, total = list_entries(
+    items, total = await list_entries(
         memory_user_id,
         limit=limit,
         offset=offset,
@@ -61,12 +63,47 @@ def _sanitize_tags(tags: list[str]) -> list[str]:
     return out
 
 
+@history_router.get("/{entry_id}/replay")
+async def replay_history_entry(request: Request, entry_id: str):
+    """
+    Re-execute a archived query: load SQL from FalkorDB memory, run on the source DB.
+
+    Does not invoke the text2sql / LLM pipeline.
+    """
+    memory_user_id = _resolve_memory_user_id(request)
+    entry = await get_entry_by_id(memory_user_id, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="History entry not found")
+
+    if entry.get("status") != "verified":
+        raise HTTPException(
+            status_code=400,
+            detail="Only verified queries can be replayed",
+        )
+
+    try:
+        payload = await replay_history_query(
+            memory_user_id,
+            graph_id=str(entry.get("graph_id", "")),
+            intent=str(entry.get("intent", "")),
+            sql_query=entry.get("sql_query"),
+        )
+        return JSONResponse(content=payload)
+    except InvalidArgumentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.exception("History replay failed for entry %s", entry_id)
+        raise HTTPException(status_code=500, detail="Failed to replay query") from exc
+
+
 @history_router.post("")
 async def post_history(request: Request, body: HistoryEntryCreate):
     """Append a history row (typically called by the SPA after a query finishes)."""
     memory_user_id = _resolve_memory_user_id(request)
     try:
-        row = append_entry(
+        row = await append_entry(
             memory_user_id,
             {
                 "graph_id": body.graph_id.strip(),
@@ -78,6 +115,6 @@ async def post_history(request: Request, body: HistoryEntryCreate):
             },
         )
         return JSONResponse(content=row, status_code=201)
-    except OSError as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Failed to persist history: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to save history") from exc

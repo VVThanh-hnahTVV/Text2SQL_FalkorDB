@@ -21,6 +21,7 @@ from api.graph import find, get_db_description, get_user_rules
 from api.loaders.postgres_loader import PostgresLoader
 from api.loaders.mysql_loader import MySQLLoader
 from api.memory.graphiti_tool import MemoryTool
+from api.core.query_history_store import update_entry_sql
 from api.sql_utils import SQLIdentifierQuoter, DatabaseSpecificQuoter
 
 # Use the same delimiter as in the JavaScript
@@ -765,6 +766,21 @@ What this will do:
                     lambda t: logging.error("Query memory save failed: %s", t.exception())  # nosemgrep
                     if t.exception() else logging.info("Query memory saved successfully")
                 )
+
+                if full_response["success"] and answer_an.get("sql_query"):
+                    history_graph_id = graph_id.removeprefix(f"{user_id}_")
+                    sql_attach_task = asyncio.create_task(
+                        update_entry_sql(
+                            memory_user_id,
+                            graph_id=history_graph_id,
+                            intent=queries_history[-1],
+                            sql_query=answer_an["sql_query"],
+                        )
+                    )
+                    sql_attach_task.add_done_callback(
+                        lambda t: logging.error("History SQL attach failed: %s", t.exception())  # nosemgrep
+                        if t.exception() else None
+                    )
 
                 # Save conversation with memory tool (run in background)
                 save_task = asyncio.create_task(

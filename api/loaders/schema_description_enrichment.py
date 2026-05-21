@@ -24,9 +24,9 @@ _COLUMN_DESCRIPTION_APPENDS: Dict[Tuple[str, str], Tuple[str, str]] = {
         "apps",
         "name",
     ): (
-        'Glossary: internal/marketing name "Smart menu" refers to '
+        'Glossary: internal/marketing name "menu" refers to '
         "Qikify Mega Menu & Navigation; match by name or slug tmenu.",
-        'Glossary: internal/marketing name "Smart menu"',
+        'Glossary: internal/marketing name "Smart menu" or "smartmenu"',
     ),
 }
 

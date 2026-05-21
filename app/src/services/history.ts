@@ -1,7 +1,11 @@
 import { buildApiUrl } from "@/config/api";
 import { csrfHeaders } from "@/lib/csrf";
 import { userIdHeaders } from "@/lib/anonymousUser";
-import type { QueryHistoryListResponse, QueryHistoryRecordCreate } from "@/types/api";
+import type {
+  QueryHistoryListResponse,
+  QueryHistoryRecordCreate,
+  QueryHistoryReplayResponse,
+} from "@/types/api";
 
 export class HistoryService {
   static async list(params: {
@@ -32,6 +36,31 @@ export class HistoryService {
     }
 
     return (await response.json()) as QueryHistoryListResponse;
+  }
+
+  static async replay(entryId: string): Promise<QueryHistoryReplayResponse> {
+    const url = buildApiUrl(`/history/${encodeURIComponent(entryId)}/replay`);
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        ...userIdHeaders(),
+      },
+    });
+
+    if (!response.ok) {
+      let detail = `Replay failed (${response.status})`;
+      try {
+        const body = (await response.json()) as { detail?: string };
+        if (body.detail) detail = body.detail;
+      } catch {
+        const text = await response.text();
+        if (text) detail = text;
+      }
+      throw new Error(detail);
+    }
+
+    return (await response.json()) as QueryHistoryReplayResponse;
   }
 
   static async record(entry: QueryHistoryRecordCreate): Promise<void> {

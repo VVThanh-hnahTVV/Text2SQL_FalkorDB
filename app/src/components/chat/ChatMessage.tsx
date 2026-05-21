@@ -308,7 +308,7 @@ const OptionalColumnSelect = ({
   </Flex>
 );
 
-const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps) => {
+export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps) => {
   const chartExportRef = useRef<G2ChartRef>(null);
   const columns = useMemo(() => Object.keys(queryData[0] || {}), [queryData]);
   const columnsKey = columns.join('\0');

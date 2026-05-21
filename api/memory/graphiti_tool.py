@@ -434,6 +434,64 @@ class MemoryTool:
         except Exception as e:
             logging.error("Error saving query memory: %s", e)
             return False
+
+    async def find_sql_for_user_query(
+        self,
+        user_query: str,
+        *,
+        success_only: bool = True,
+    ) -> Optional[str]:
+        """
+        Look up the saved SQL for an exact natural-language query on this database.
+
+        Uses Query nodes in the user's memory graph (no LLM).
+        """
+        database_node_name = f"Database {self.graph_id}"
+        graph_driver = self.graphiti_client.driver
+        try:
+            database_result = await graph_driver.execute_query(
+                """
+                MATCH (n:Entity {name: $name})
+                RETURN n.uuid AS uuid
+                LIMIT 1
+                """,
+                name=database_node_name,
+            )
+            if not database_result[0]:
+                return None
+
+            database_node_uuid = database_result[0][0]["uuid"]
+            rel_type = "SUCCESS" if success_only else None
+            if rel_type:
+                match_clause = f"(db)-[:{rel_type}]->(q:Query)"
+            else:
+                match_clause = "(db)-[]->(q:Query)"
+
+            lookup_query = f"""
+            MATCH (db:Entity {{uuid: $database_uuid}})
+            MATCH {match_clause}
+            WHERE q.user_query = $user_query
+            RETURN q.sql_query AS sql_query
+            ORDER BY q.timestamp DESC
+            LIMIT 1
+            """
+            lookup_result = await graph_driver.execute_query(
+                lookup_query,
+                database_uuid=database_node_uuid,
+                user_query=user_query,
+            )
+            if not lookup_result[0]:
+                if success_only:
+                    return await self.find_sql_for_user_query(
+                        user_query, success_only=False
+                    )
+                return None
+
+            sql = lookup_result[0][0].get("sql_query")
+            return str(sql).strip() if sql else None
+        except Exception as e:
+            logging.error("Error looking up SQL for query memory: %s", e)
+            return None
         
     async def retrieve_similar_queries(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """

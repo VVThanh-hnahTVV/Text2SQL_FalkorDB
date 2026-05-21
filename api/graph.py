@@ -106,6 +106,40 @@ async def _query_graph(
     result = await graph.query(query, params or {}, timeout=timeout)
     return result.result_set
 
+
+def _dedupe_columns(columns: List[Any]) -> List[dict]:
+    """Deduplicate column entries by columnName, preserving first occurrence."""
+    seen: Dict[str, dict] = {}
+    for col in columns:
+        if not col:
+            continue
+        col_dict = dict(col) if not isinstance(col, dict) else col
+        name = col_dict.get("columnName") or col_dict.get("name")
+        if name and name not in seen:
+            seen[name] = col_dict
+    return list(seen.values())
+
+
+def _normalize_foreign_keys(foreign_keys: Any) -> str:
+    """Ensure foreign_keys is a string with the expected prefix."""
+    if isinstance(foreign_keys, str) and foreign_keys.startswith("Foreign keys: "):
+        return foreign_keys
+    return "Foreign keys: " + str(foreign_keys)
+
+
+def _unique_table_names(*table_result_lists: List[List[Any]]) -> List[str]:
+    """Collect unique table names from find results, preserving first-seen order."""
+    seen: set[str] = set()
+    names: List[str] = []
+    for result_list in table_result_lists:
+        for table_info in result_list or []:
+            name = table_info[0]
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+    return names
+
+
 async def _find_tables(
     graph,
     embeddings: List[List[float]]
@@ -120,17 +154,19 @@ async def _find_tables(
     Returns:
         List of matching table information.
     """
-    query = """
-        CALL db.idx.vector.queryNodes('Table','embedding',3,vecf32($embedding))
+    top_k = Config.VECTOR_SEARCH_TOP_K_TABLES
+    query = f"""
+        CALL db.idx.vector.queryNodes('Table','embedding',{top_k},vecf32($embedding))
         YIELD node, score
-        MATCH (node)-[:BELONGS_TO]-(columns)
-        RETURN node.name, node.description, node.foreign_keys, collect({
-            columnName: columns.name,
-            description: columns.description,
-            dataType: columns.type,
-            keyType: columns.key,
-            nullable: columns.nullable
-        })
+        WITH DISTINCT node
+        MATCH (col:Column)-[:BELONGS_TO]->(node)
+        RETURN node.name, node.description, node.foreign_keys, collect(DISTINCT {{
+            columnName: col.name,
+            description: col.description,
+            dataType: col.type,
+            keyType: col.key,
+            nullable: col.nullable
+        }})
     """
 
     tasks = [
@@ -158,21 +194,25 @@ async def _find_tables_by_columns(
     Returns:
         List of matching table information.
     """
-    query = """
-        CALL db.idx.vector.queryNodes('Column','embedding',3,vecf32($embedding))
+    top_k = Config.VECTOR_SEARCH_TOP_K_COLUMNS
+    print("***************** _find_tables_by_columns: top_k", top_k)
+    query = f"""
+        CALL db.idx.vector.queryNodes('Column','embedding',{top_k},vecf32($embedding))
         YIELD node, score
-        MATCH (node)-[:BELONGS_TO]-(table)-[:BELONGS_TO]-(columns)
+        MATCH (node)-[:BELONGS_TO]->(table:Table)
+        WITH DISTINCT table
+        MATCH (col:Column)-[:BELONGS_TO]->(table)
         RETURN
             table.name,
             table.description,
             table.foreign_keys,
-            collect({
-                columnName: columns.name,
-                description: columns.description,
-                dataType: columns.type,
-                keyType: columns.key,
-                nullable: columns.nullable
-            })
+            collect(DISTINCT {{
+                columnName: col.name,
+                description: col.description,
+                dataType: col.type,
+                keyType: col.key,
+                nullable: col.nullable
+            }})
     """
 
     tasks = [
@@ -202,16 +242,17 @@ async def _find_tables_sphere(
     """
     query = """
         MATCH (node:Table {name: $name})
-        MATCH (node)-[:BELONGS_TO]-(column)-[:REFERENCES]-()-[:BELONGS_TO]-(table_ref)
-        WITH table_ref
-        MATCH (table_ref)-[:BELONGS_TO]-(columns)
+        MATCH (node)<-[:BELONGS_TO]-(column)-[:REFERENCES]->()
+              -[:BELONGS_TO]->(table_ref:Table)
+        WITH DISTINCT table_ref
+        MATCH (col:Column)-[:BELONGS_TO]->(table_ref)
         RETURN table_ref.name, table_ref.description, table_ref.foreign_keys,
-               collect({
-                   columnName: columns.name,
-                   description: columns.description,
-                   dataType: columns.type,
-                   keyType: columns.key,
-                   nullable: columns.nullable
+               collect(DISTINCT {
+                   columnName: col.name,
+                   description: col.description,
+                   dataType: col.type,
+                   keyType: col.key,
+                   nullable: col.nullable
                })
     """
     try:
@@ -266,7 +307,7 @@ async def _find_connecting_tables(
     WITH DISTINCT target_table
     MATCH (col:Column)-[:BELONGS_TO]->(target_table)
     WITH target_table,
-         collect({
+         collect(DISTINCT {
             columnName: col.name,
             description: col.description,
             dataType: col.type,
@@ -308,8 +349,14 @@ async def find( # pylint: disable=too-many-locals
     print("***************** find: db_description", db_description)
     logging.info("Calling LLM to find relevant tables/columns for query")
 
+    table_desc_count = Config.FIND_TABLE_DESCRIPTIONS_COUNT
+    column_desc_count = Config.FIND_COLUMN_DESCRIPTIONS_COUNT
+    print("***************** find: table_desc_count", table_desc_count)
+    print("***************** find: column_desc_count", column_desc_count)
     system_prompt = Config.FIND_SYSTEM_PROMPT.format(
-        db_description=db_description
+        db_description=db_description,
+        table_count=table_desc_count,
+        column_count=column_desc_count,
     )
     user_prompt = json.dumps({
         "previous_user_queries": previous_queries,
@@ -331,21 +378,7 @@ async def find( # pylint: disable=too-many-locals
     completion_result = completion(
         model=Config.COMPLETION_MODEL,
         response_format=Descriptions,
-        messages=[
-            {
-                "role": "system",
-                "content": Config.FIND_SYSTEM_PROMPT.format(
-                    db_description=db_description
-                )
-            },
-            {
-                "role": "user",
-                "content": json.dumps({
-                    "previous_user_queries": previous_queries,
-                    "user_query": user_query
-                })
-            },
-        ],
+        messages=messages,
         temperature=0,
     )
     print("***************** find: completion_result")
@@ -354,8 +387,20 @@ async def find( # pylint: disable=too-many-locals
     print("***************** find: json_data")
     pprint(json_data, width=120, compact=False)
     descriptions = Descriptions(**json_data)
-    descriptions_text = ([desc.description for desc in descriptions.tables_descriptions] +
-                         [desc.description for desc in descriptions.columns_descriptions])
+    table_descs = descriptions.tables_descriptions[:table_desc_count]
+    column_descs = descriptions.columns_descriptions[:column_desc_count]
+    if len(table_descs) < table_desc_count or len(column_descs) < column_desc_count:
+        logging.warning(
+            "Find LLM returned fewer descriptions than configured: tables %s/%s, columns %s/%s",
+            len(table_descs),
+            table_desc_count,
+            len(column_descs),
+            column_desc_count,
+        )
+    descriptions_text = (
+        [desc.description for desc in table_descs]
+        + [desc.description for desc in column_descs]
+    )
     print("***************** find: descriptions_text")
     pprint(descriptions_text, width=120, compact=False)
     if not descriptions_text:
@@ -364,8 +409,8 @@ async def find( # pylint: disable=too-many-locals
     embedding_results = Config.EMBEDDING_MODEL.embed(descriptions_text)
 
     # Split embeddings back into table and column embeddings
-    table_embeddings = embedding_results[:len(descriptions.tables_descriptions)]
-    column_embeddings = embedding_results[len(descriptions.tables_descriptions):]
+    table_embeddings = embedding_results[:len(table_descs)]
+    column_embeddings = embedding_results[len(table_descs):]
 
     main_tasks = []
 
@@ -378,11 +423,18 @@ async def find( # pylint: disable=too-many-locals
     results = await asyncio.gather(*main_tasks)
 
     # Unpack results based on what tasks we ran
-    tables_des = results[0] if table_embeddings else []
-    tables_by_columns_des = results[1] if (table_embeddings and column_embeddings) else []
+    if table_embeddings and column_embeddings:
+        tables_des = results[0]
+        tables_by_columns_des = results[1]
+    elif table_embeddings:
+        tables_des = results[0]
+        tables_by_columns_des = []
+    else:
+        tables_des = []
+        tables_by_columns_des = results[0]
 
-    # Extract table names once for reuse
-    found_table_names = [t[0] for t in tables_des] if tables_des else []
+    # Table names from vector-by-table and vector-by-column (deduped) for sphere/connecting
+    found_table_names = _unique_table_names(tables_des, tables_by_columns_des)
 
     # Only run sphere and connecting searches if we found tables
     if found_table_names:
@@ -409,20 +461,26 @@ async def find( # pylint: disable=too-many-locals
     return combined_tables
 
 def _get_unique_tables(tables_list):
-    # Dictionary to store unique tables with the table name as the key
-    unique_tables = {}
+    """Merge table rows by name and deduplicate columns by columnName."""
+    unique_tables: Dict[str, list] = {}
 
     for table_info in tables_list:
-        table_name = table_info[0]  # The first element is the table name
-
-        # Only add if this table name hasn't been seen before
+        table_name = table_info[0]
         try:
+            columns = _dedupe_columns(table_info[3])
+            fk_value = _normalize_foreign_keys(table_info[2])
+
             if table_name not in unique_tables:
-                table_info[3] = [dict(od) for od in table_info[3]]
-                table_info[2] = "Foreign keys: " + table_info[2]
-                unique_tables[table_name] = table_info
+                unique_tables[table_name] = [
+                    table_name,
+                    table_info[1],
+                    fk_value,
+                    columns,
+                ]
+            else:
+                existing = unique_tables[table_name]
+                existing[3] = _dedupe_columns(existing[3] + columns)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Error deduplicating table %s: %s", table_info, e)
 
-    # Return the values (the unique table info lists)
     return list(unique_tables.values())

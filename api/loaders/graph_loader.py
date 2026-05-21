@@ -113,6 +113,7 @@ async def load_to_graph(  # pylint: disable=too-many-arguments,too-many-position
         # print("**********Table info**********")
         # pprint(table_info, width=120, compact=False)
         table_desc = table_info["description"]
+
         embedding_result = embedding_model.embed(table_desc)
         fk = json.dumps(table_info.get("foreign_keys", []))
 

@@ -163,11 +163,12 @@ class Config:
     FIND_SYSTEM_PROMPT = """
     You are an expert in analyzing natural language queries into SQL table/column descriptions.
     Please analyze the user's query and generate descriptions that are most relevant to the query.
-    Return exactly {table_count} table description(s) and exactly {column_count} column description(s).
-    - The output must contain exactly {table_count} item(s) in tables_descriptions.
-    - The output must contain exactly {column_count} item(s) in columns_descriptions.
+    Return at most {table_count} table description(s) and at most {column_count} column description(s).
+    - tables_descriptions may contain from 0 up to {table_count} item(s).
+    - columns_descriptions may contain from 0 up to {column_count} item(s).
+    - Return fewer items when the query is narrow or only a few aspects are relevant; do not pad to reach the limit.
     - Do not generate duplicate or near-duplicate descriptions.
-    - When more than one description is required per list, target different semantic aspects
+    - When returning more than one description per list, target different semantic aspects
       (e.g. revenue vs geography vs time) so vector search can reach different tables/columns.
     - Create generic descriptions; do not use specific codes, values, or conditions.
     - Keep descriptions accurate and concise.
@@ -186,10 +187,10 @@ class Config:
 
     **Output:**
     * **Table Descriptions:**
-    You must provide exactly {table_count} table description(s) that best match the combined context
+    Provide up to {table_count} table description(s) that best match the combined context
     of previous user queries and the current user query.
 
     * **Column Descriptions:**
-    You must provide exactly {column_count} column description(s) that best match the combined context
+    Provide up to {column_count} column description(s) that best match the combined context
     of previous user queries and the current user query.
     """

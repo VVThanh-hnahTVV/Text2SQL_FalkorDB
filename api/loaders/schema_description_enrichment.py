@@ -12,10 +12,8 @@ from typing import Any, Dict, Tuple
 
 # table_name -> (suffix, substring_that_means_already_applied)
 _TABLE_DESCRIPTION_APPENDS: Dict[str, Tuple[str, str]] = {
-    "apps": (
-        "Catalog of apps (display names, slugs). Used for reporting and filters.",
-        "Catalog of apps (display names, slugs)",
-    ),
+
+
 }
 
 # (table_name, column_name) -> (suffix, substring_that_means_already_applied)
@@ -24,9 +22,32 @@ _COLUMN_DESCRIPTION_APPENDS: Dict[Tuple[str, str], Tuple[str, str]] = {
         "apps",
         "name",
     ): (
-        'Glossary: internal/marketing name "menu" refers to '
+        'Glossary: internal/marketing name "Smart menu" refers to '
         "Qikify Mega Menu & Navigation; match by name or slug tmenu.",
-        'Glossary: internal/marketing name "Smart menu" or "smartmenu"',
+        'Glossary: internal/marketing name "Smart menu"',
+    ),
+    (
+        "shops",
+        "country",
+    ): (
+        "Country name (e.g., United States). Glossary: England or UK means "
+        "United Kingdom; use country_code GB and country_name United Kingdom.",
+        "England or UK means United Kingdom",
+    ),
+    (
+        "shops",
+        "country_code",
+    ): (
+        "ISO country code (e.g., US, VN). Glossary: England or UK maps to GB, "
+        "not EN.",
+        "England or UK maps to GB",
+    ),
+    (
+        "shops",
+        "country_name",
+    ): (
+        "Full country name. Glossary: when country is England or UK country_name is United Kingdom, not England.",
+        "country_name is United Kingdom, not England",
     ),
 }
 

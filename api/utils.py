@@ -154,13 +154,6 @@ def create_combined_description(  # pylint: disable=too-many-locals
                     table_name,
                 )
                 table_info[table_name]["description"] = prior or table_name
-            print("Utils: create_combined_description table_info", table_info)
-    for table_name, table_info in table_info.items():
-        print("Utils: create_combined_description table_info['description']", table_info['description'])
-        print("Utils: create_combined_description table_info['columns']", table_info['columns'])
-        print("Utils: create_combined_description table_info['foreign_keys']", table_info['foreign_keys'])
-        print("Utils: create_combined_description table_info['col_descriptions']", table_info['col_descriptions'])
-        print("Utils: create_combined_description table_info['row_count']", table_info['row_count'])
     return table_info
 
 def generate_db_description(

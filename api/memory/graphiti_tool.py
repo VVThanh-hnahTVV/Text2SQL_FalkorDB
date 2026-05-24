@@ -10,7 +10,7 @@ import os
 import uuid
 from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime
-
+from pprint import pprint
 from redis import RedisError
 
 # Import Azure OpenAI components
@@ -587,12 +587,19 @@ class MemoryTool:
             logging.error("Error searching user node: %s", e)
             return ""
         
-    async def extract_episode_from_rel(self, rel_result):
+    async def extract_episode_from_rel(
+        self,
+        rel_result,
+        seen_uuids: Optional[set] = None,
+        seen_contents: Optional[set] = None,
+    ):
         """
         Extracts the content of episodes associated with a given relationship result.
 
         Args:
             rel_result: An object containing an 'episodes' attribute, which is a list of episode UUIDs.
+            seen_uuids: Optional set of episode UUIDs already returned; skips duplicates across search hits.
+            seen_contents: Optional set of episode bodies already returned; skips near-duplicate summaries.
 
         Returns:
             List of episode content strings corresponding to the provided episode UUIDs.
@@ -608,11 +615,24 @@ class MemoryTool:
 
         episode_contents = []
         for episode_uuid in episodes_uuid:
+            uuid_key = str(episode_uuid)
+            if seen_uuids is not None:
+                if uuid_key in seen_uuids:
+                    continue
+                seen_uuids.add(uuid_key)
+
             episode_content, _, _ = await driver.execute_query(query, uuid=episode_uuid)
             if episode_content:
                 content = episode_content[0].get("content")
+                if not content:
+                    continue
+                content_key = content.strip()
+                if seen_contents is not None:
+                    if content_key in seen_contents:
+                        continue
+                    seen_contents.add(content_key)
                 episode_contents.append(content)
-
+        print("***************** episode_contents", episode_contents)
         return episode_contents
 
     async def search_database_facts(self, query: str, limit: int = 5, episode_limit: int = 3) -> str:
@@ -655,13 +675,23 @@ class MemoryTool:
             # Filter and format results for database-specific content into a single string
             database_facts_text = []
             episodes_contents = []
+            seen_episode_uuids: set = set()
+            seen_episode_contents: set = set()
+            seen_fact_entries: set = set()
             if reranked_results:
                 logging.info("Previous session and facts for %s:", self.graph_id)
                 for ritem in reranked_results:
                     try:
                         if len(episodes_contents) < episode_limit:
-                            episodes_content = await self.extract_episode_from_rel(ritem)
-                            episodes_contents.extend(episodes_content)
+                            episodes_content = await self.extract_episode_from_rel(
+                                ritem,
+                                seen_uuids=seen_episode_uuids,
+                                seen_contents=seen_episode_contents,
+                            )
+                            for content in episodes_content:
+                                if len(episodes_contents) >= episode_limit:
+                                    break
+                                episodes_contents.append(content)
                         fact_entry = f"{getattr(ritem, 'fact', '') or ''}"
 
                         # Add time information if available
@@ -674,7 +704,10 @@ class MemoryTool:
                         if time_info:
                             fact_entry += f" ({', '.join(time_info)})"
 
-                        database_facts_text.append(fact_entry)
+                        fact_key = fact_entry.strip()
+                        if fact_key and fact_key not in seen_fact_entries:
+                            seen_fact_entries.add(fact_key)
+                            database_facts_text.append(fact_entry)
                     except Exception:
                         continue
             facts = "\n".join(database_facts_text) if database_facts_text else ""
@@ -815,6 +848,9 @@ class MemoryTool:
         success_status = conversation.get('success', True)
         conv_text += f"Execution Status: {'Success' if success_status else 'Failed'}\n"
         conv_text += "\n"
+        print("***************** summarize_conversation conv_text")
+        pprint(conv_text, width=120, compact=False)
+
 
         prompt = f"""
                 Rewrite the following QueryWeaver question-answer interaction into a 
@@ -847,6 +883,8 @@ class MemoryTool:
                     messages.append({"role": "user", "content": query})
                     messages.append({"role": "assistant", "content": result})
             messages.append({"role": "user", "content": prompt})
+            print("***************** summarize_conversation messages")
+            pprint(messages, width=120, compact=False)
             response = completion(
                 model=Config.COMPLETION_MODEL,
                 messages=messages,
@@ -856,6 +894,8 @@ class MemoryTool:
             # Parse the direct text response (no JSON parsing needed)
             raw_content = response.choices[0].message.content
             content = (raw_content or "").strip()
+            print("***************** summarize_conversation content")
+            pprint(content, width=120, compact=False)
             return {
                 "database_summary": content
             }

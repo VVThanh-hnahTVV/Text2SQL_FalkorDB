@@ -321,16 +321,6 @@ h3,
   }
 }
 
-@media (max-width: 575px) {
-  .workspace-status-tag {
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: middle;
-  }
-}
-
 .chat-input-footer {
   padding: 12px var(--page-padding-x) 20px;
 }

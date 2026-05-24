@@ -56,7 +56,9 @@ class AnalysisAgent(BaseAgent):
         response = run_completion(
             self.messages, self.custom_model, self.custom_api_key, temperature=0
         )
+        print("***************** Analysis Agent: response", response)
         analysis = parse_response(response)
+
         if isinstance(analysis["ambiguities"], list):
             analysis["ambiguities"] = [
                 item.replace("-", " ") for item in analysis["ambiguities"]

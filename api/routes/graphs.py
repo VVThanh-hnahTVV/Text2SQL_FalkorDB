@@ -138,6 +138,8 @@ async def query_graph(
         graph_id (str): The ID of the graph to query.
         chat_data (ChatRequest): The chat data containing user queries and context.
     """
+    print("***************** query_graph: chat_data", chat_data)
+    print("***************** query_graph: graph_id", request)
     try:
         memory_user_id = _resolve_memory_user_id(request)
         generator = await query_database(

@@ -103,7 +103,7 @@ export interface ApiError {
   status?: number;
 }
 
-/** Query history (GET /history, POST /history) */
+/** Query history (GET/POST /api/history) */
 export type QueryHistoryStatus = "verified" | "error";
 
 export interface QueryHistoryItem {
@@ -131,7 +131,7 @@ export interface QueryHistoryRecordCreate {
   error_kind?: string | null;
 }
 
-/** GET /history/{id}/replay — re-execute SQL from FalkorDB memory (no LLM). */
+/** GET /api/history/{id}/replay — re-execute SQL from FalkorDB memory (no LLM). */
 export interface QueryHistoryReplayResponse {
   graph_id: string;
   intent: string;

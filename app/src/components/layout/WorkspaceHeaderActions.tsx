@@ -1,11 +1,10 @@
-import { Button, Dropdown, Space, Tag, Spin, Grid } from "antd";
+import { Button, Dropdown, Space, Spin, Grid, Switch, Tooltip, Typography, Flex } from "antd";
 import type { MenuProps } from "antd";
 import {
   DatabaseOutlined,
   ReloadOutlined,
   DeleteOutlined,
   BellOutlined,
-  UploadOutlined,
   MoreOutlined,
 } from "@ant-design/icons";
 import type { Graph } from "@/types/api";
@@ -19,7 +18,8 @@ export interface WorkspaceHeaderActionsProps {
   onDeleteGraph: (graphId: string, graphName: string) => void;
   onRefreshSchema: () => void;
   onConnectDatabase: () => void;
-  onUploadSchema: () => void;
+  useMemory: boolean;
+  onUseMemoryChange: (enabled: boolean) => void;
 }
 
 const WorkspaceHeaderActions = ({
@@ -31,7 +31,8 @@ const WorkspaceHeaderActions = ({
   onDeleteGraph,
   onRefreshSchema,
   onConnectDatabase,
-  onUploadSchema,
+  useMemory,
+  onUseMemoryChange,
 }: WorkspaceHeaderActionsProps) => {
   const screens = Grid.useBreakpoint();
   const isCompact = !screens.lg;
@@ -69,16 +70,6 @@ const WorkspaceHeaderActions = ({
           };
         });
 
-  const statusTag = selectedGraph ? (
-    <Tag color="success" className="workspace-status-tag" style={{ margin: 0 }} data-testid="database-status-badge">
-      Connected: {selectedGraph.name}
-    </Tag>
-  ) : (
-    <Tag color="warning" className="workspace-status-tag" style={{ margin: 0 }} data-testid="database-status-badge">
-      No database
-    </Tag>
-  );
-
   const databaseDropdown = (
     <Dropdown menu={{ items: graphMenuItems }} trigger={["click"]} disabled={disabled}>
       <Button icon={<DatabaseOutlined />} data-testid="database-selector-trigger">
@@ -112,14 +103,24 @@ const WorkspaceHeaderActions = ({
     </Button>
   );
 
-  const uploadBtn = (
-    <Button icon={<UploadOutlined />} onClick={onUploadSchema} disabled={disabled} data-testid="upload-schema-btn">
-      {isCompact ? null : "Upload"}
-    </Button>
-  );
-
   const notifyBtn = (
     <Button type="text" icon={<BellOutlined />} aria-label="Notifications" disabled title="Coming soon" />
+  );
+
+  const memoryToggle = (
+    <Tooltip title="Use memory context from prior turns">
+      <Flex align="center" gap={8} style={{ margin: 0 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 13, whiteSpace: "nowrap" }}>
+          Memory
+        </Typography.Text>
+        <Switch
+          checked={useMemory}
+          onChange={onUseMemoryChange}
+          disabled={disabled}
+          data-testid="use-memory-toggle"
+        />
+      </Flex>
+    </Tooltip>
   );
 
   if (isCompact) {
@@ -134,15 +135,6 @@ const WorkspaceHeaderActions = ({
           disabled,
         },
         {
-          key: "upload",
-          label: "Upload schema",
-          onClick: () => {
-            if (!disabled) onUploadSchema();
-          },
-          disabled,
-        },
-        { type: "divider" },
-        {
           key: "refresh",
           label: "Refresh schema",
           onClick: () => {
@@ -155,9 +147,9 @@ const WorkspaceHeaderActions = ({
 
     return (
       <Space size="small" wrap>
-        {statusTag}
         {databaseDropdown}
         {refreshBtn}
+        {memoryToggle}
         <Dropdown menu={moreMenu} trigger={["click"]}>
           <Button icon={<MoreOutlined />} aria-label="More actions" />
         </Dropdown>
@@ -167,11 +159,10 @@ const WorkspaceHeaderActions = ({
 
   return (
     <Space wrap size="middle">
-      {statusTag}
       {databaseDropdown}
       {refreshBtn}
       {connectBtn}
-      {uploadBtn}
+      {memoryToggle}
       {notifyBtn}
     </Space>
   );

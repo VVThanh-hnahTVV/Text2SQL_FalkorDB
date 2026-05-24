@@ -1,4 +1,4 @@
-import { buildApiUrl } from "@/config/api";
+import { buildBackendApiUrl } from "@/config/api";
 import { csrfHeaders } from "@/lib/csrf";
 import { userIdHeaders } from "@/lib/anonymousUser";
 import type {
@@ -6,6 +6,11 @@ import type {
   QueryHistoryRecordCreate,
   QueryHistoryReplayResponse,
 } from "@/types/api";
+
+/** Backend path is /api/history so GET /history can serve the React route on reload. */
+function historyApiUrl(suffix = ""): string {
+  return buildBackendApiUrl(`/api/history${suffix}`);
+}
 
 export class HistoryService {
   static async list(params: {
@@ -20,7 +25,7 @@ export class HistoryService {
     if (params.graph_id) sp.set("graph_id", params.graph_id);
     if (params.q) sp.set("q", params.q);
     const qs = sp.toString();
-    const url = `${buildApiUrl("/history")}${qs ? `?${qs}` : ""}`;
+    const url = `${historyApiUrl()}${qs ? `?${qs}` : ""}`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -39,7 +44,7 @@ export class HistoryService {
   }
 
   static async replay(entryId: string): Promise<QueryHistoryReplayResponse> {
-    const url = buildApiUrl(`/history/${encodeURIComponent(entryId)}/replay`);
+    const url = historyApiUrl(`/${encodeURIComponent(entryId)}/replay`);
     const response = await fetch(url, {
       method: "GET",
       credentials: "include",
@@ -65,7 +70,7 @@ export class HistoryService {
 
   static async record(entry: QueryHistoryRecordCreate): Promise<void> {
     try {
-      const response = await fetch(buildApiUrl("/history"), {
+      const response = await fetch(historyApiUrl(), {
         method: "POST",
         credentials: "include",
         headers: {

@@ -449,14 +449,15 @@ async def find( # pylint: disable=too-many-locals
     combined_tables = _get_unique_tables(
         tables_des + tables_by_columns_des + tables_by_route + tables_by_sphere
     )
-    # max_tables = max(1, Config.MAX_TABLES_FOR_ANALYSIS)
-    # if len(combined_tables) > max_tables:
-    #     logging.info(
-    #         "Limiting combined tables from %s to %s for analysis",
-    #         len(combined_tables),
-    #         max_tables,
-    #     )
-    #     combined_tables = combined_tables[:max_tables]
+    max_tables = max(1, Config.MAX_TABLES_FOR_ANALYSIS)
+    
+    if len(combined_tables) > max_tables:
+        logging.info(
+            "Limiting combined tables from %s to %s for analysis",
+            len(combined_tables),
+            max_tables,
+        )
+        combined_tables = combined_tables[:max_tables]
 
     return combined_tables
 

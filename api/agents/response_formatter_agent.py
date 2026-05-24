@@ -1,5 +1,6 @@
 """Response formatter agent for generating user-readable responses from SQL query results."""
 
+import re
 from typing import List, Dict
 from .utils import run_completion
 
@@ -57,6 +58,20 @@ class ResponseFormatterAgent:
         self.custom_api_key = custom_api_key
         self.custom_model = custom_model
 
+    @staticmethod
+    def _strip_lookup_tables_section(db_description: str) -> str:
+        """
+        Remove optional lookup-table appendix from db_description before prompting.
+        """
+        if not db_description:
+            return db_description
+        return re.sub(
+            r"\n\nLookup/list tables \(row_count <= 20\) with sample values:\n[\s\S]*$",
+            "",
+            db_description,
+            flags=re.MULTILINE,
+        ).strip()
+
     def format_response(self, user_query: str, sql_query: str,
                        query_results: List[Dict], db_description: str = "") -> str:
         """
@@ -92,13 +107,16 @@ class ResponseFormatterAgent:
         # Determine the type of SQL operation
         sql_type = sql_query.strip().split()[0].upper() if sql_query else "UNKNOWN"
 
+        clean_db_description = self._strip_lookup_tables_section(db_description)
+
         prompt = RESPONSE_FORMATTER_PROMPT.format(
-            DB_DESCRIPTION=db_description if db_description else "Not provided",
+            DB_DESCRIPTION=clean_db_description if clean_db_description else "Not provided",
             USER_QUERY=user_query,
             SQL_QUERY=sql_query,
             SQL_TYPE=sql_type,
             FORMATTED_RESULTS=formatted_results
         )
+        print("***************** Response Formatter Agent: prompt", prompt)
 
         return prompt
 

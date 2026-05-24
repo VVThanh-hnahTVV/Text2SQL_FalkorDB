@@ -15,7 +15,7 @@ from api.routes.graphs import _resolve_memory_user_id
 
 logger = logging.getLogger(__name__)
 
-history_router = APIRouter(prefix="/history", tags=["History"])
+history_router = APIRouter(prefix="/api/history", tags=["History"])
 
 _INTENT_MAX = 8000
 

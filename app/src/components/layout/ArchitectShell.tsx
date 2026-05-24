@@ -4,7 +4,6 @@ import {
   AppstoreOutlined,
   HistoryOutlined,
   DatabaseOutlined,
-  SettingOutlined,
   PlusOutlined,
   MenuOutlined,
   MoonOutlined,
@@ -70,7 +69,7 @@ function SiderFooterLinks() {
   );
 }
 
-export type ArchitectNavKey = "workspace" | "history" | "settings";
+export type ArchitectNavKey = "workspace" | "history";
 
 export interface ArchitectShellProps {
   /** Which left-nav item is active */
@@ -144,7 +143,6 @@ const ArchitectShell = ({
       label: "Data Viewer",
       path: "#",
     },
-    { key: "settings", icon: <SettingOutlined />, label: "Settings", path: "/settings" },
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {

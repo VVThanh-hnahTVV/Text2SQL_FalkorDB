@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Typography } from "antd";
 import ArchitectShell from "@/components/layout/ArchitectShell";
 import SchemaViewer from "@/components/schema";
@@ -15,11 +15,11 @@ import { headlineFontFamily } from "@/theme/architectTheme";
 
 const Index = () => {
   const { resetChat } = useChat();
-  const { selectedGraph, graphs, selectGraph, uploadSchema } = useDatabase();
+  const { selectedGraph, graphs, selectGraph } = useDatabase();
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSchemaViewer, setShowSchemaViewer] = useState(false);
-  const [useMemory] = useState(() => {
+  const [useMemory, setUseMemory] = useState(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("queryweaver_use_memory");
       return saved === null ? true : saved === "true";
@@ -36,38 +36,16 @@ const Index = () => {
   const [isRefreshingSchema, setIsRefreshingSchema] = useState(false);
   const [isChatProcessing, setIsChatProcessing] = useState(false);
   const [databaseToDelete, setDatabaseToDelete] = useState<{ id: string; name: string; isDemo: boolean } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("queryweaver_use_memory", String(useMemory));
+    }
+  }, [useMemory]);
 
   const handleConnectDatabase = () => {
     if (isRefreshingSchema || isChatProcessing) return;
     setShowDatabaseModal(true);
-  };
-
-  const handleUploadSchema = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      await uploadSchema(file, file.name.replace(/\.[^/.]+$/, ""));
-      showToast({
-        title: "Schema Uploaded",
-        description: "Database schema uploaded successfully!",
-      });
-    } catch (error) {
-      showToast({
-        title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload schema",
-        variant: "destructive",
-      });
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
   };
 
   const handleDeleteGraph = (graphId: string, graphName: string, _e?: React.MouseEvent) => {
@@ -203,21 +181,13 @@ const Index = () => {
       onDeleteGraph={(id, name) => handleDeleteGraph(id, name)}
       onRefreshSchema={() => void handleRefreshSchema()}
       onConnectDatabase={handleConnectDatabase}
-      onUploadSchema={handleUploadSchema}
+      useMemory={useMemory}
+      onUseMemoryChange={setUseMemory}
     />
   );
 
   return (
     <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".sql,.csv,.json"
-        onChange={handleFileSelect}
-        style={{ display: "none" }}
-        data-testid="schema-upload-input"
-      />
-
       <ArchitectShell
         activeNav="workspace"
         showRightRail

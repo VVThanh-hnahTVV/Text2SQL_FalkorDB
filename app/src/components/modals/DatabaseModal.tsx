@@ -3,7 +3,6 @@ import {
   Modal,
   Button,
   Input,
-  Select,
   Space,
   Typography,
   Flex,
@@ -29,7 +28,6 @@ interface ConnectionStep {
 const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
   const screens = Grid.useBreakpoint();
   const [connectionMode, setConnectionMode] = useState<"url" | "manual">("url");
-  const [selectedDatabase, setSelectedDatabase] = useState("");
   const [connectionUrl, setConnectionUrl] = useState("");
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState("");
@@ -68,16 +66,16 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
 
   const handleConnect = async () => {
     if (connectionMode === "url") {
-      if (!connectionUrl || !selectedDatabase) {
+      if (!connectionUrl) {
         showToast({
           title: "Missing Information",
-          description: "Please select database type and enter connection URL",
+          description: "Please enter connection URL",
           variant: "destructive",
         });
         return;
       }
     } else {
-      if (!selectedDatabase || !host || !port || !database || !username) {
+      if (!host || !port || !database || !username) {
         showToast({
           title: "Missing Information",
           description: "Please fill in all required fields",
@@ -93,12 +91,11 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
     try {
       let dbUrl = connectionUrl;
       if (connectionMode === "manual") {
-        const protocol = selectedDatabase === "mysql" ? "mysql" : "postgresql";
-        const builtUrl = new URL(`${protocol}://${host}:${port}/${database}`);
+        const builtUrl = new URL(`postgresql://${host}:${port}/${database}`);
         builtUrl.username = username;
         builtUrl.password = password;
 
-        if (selectedDatabase === "postgresql" && schema.trim()) {
+        if (schema.trim()) {
           if (/[^a-zA-Z0-9_]/.test(schema.trim())) {
             throw new Error("Schema name can only contain letters, digits, and underscores");
           }
@@ -174,7 +171,6 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
               await refreshGraphs();
               onOpenChange(false);
               setConnectionMode("url");
-              setSelectedDatabase("");
               setConnectionUrl("");
               setHost("localhost");
               setPort("");
@@ -247,60 +243,39 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
       data-testid="database-modal"
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        Connect to PostgreSQL or MySQL using a connection URL or manual entry.{" "}
+        Connect to PostgreSQL using a connection URL or manual entry.{" "}
         <a href="https://www.falkordb.com/privacy-policy/" target="_blank" rel="noopener noreferrer">
           Privacy policy
         </a>
       </Typography.Paragraph>
 
       <Space direction="vertical" size="middle" style={{ width: "100%" }} data-testid="database-modal-content">
-        <div>
-          <Typography.Text strong>Database type</Typography.Text>
-          <Select
-            style={{ width: "100%", marginTop: 8 }}
-            placeholder="— Select database —"
-            value={selectedDatabase || undefined}
-            onChange={setSelectedDatabase}
-            options={[
-              { value: "postgresql", label: "PostgreSQL" },
-              { value: "mysql", label: "MySQL" },
-            ]}
-            data-testid="database-type-select"
-          />
-        </div>
+        <Flex gap={8}>
+          <Button
+            type={connectionMode === "url" ? "primary" : "default"}
+            block
+            onClick={() => setConnectionMode("url")}
+            data-testid="connection-mode-url"
+          >
+            Connection URL
+          </Button>
+          <Button
+            type={connectionMode === "manual" ? "primary" : "default"}
+            block
+            onClick={() => setConnectionMode("manual")}
+            data-testid="connection-mode-manual"
+          >
+            Manual entry
+          </Button>
+        </Flex>
 
-        {selectedDatabase && (
-          <Flex gap={8}>
-            <Button
-              type={connectionMode === "url" ? "primary" : "default"}
-              block
-              onClick={() => setConnectionMode("url")}
-              data-testid="connection-mode-url"
-            >
-              Connection URL
-            </Button>
-            <Button
-              type={connectionMode === "manual" ? "primary" : "default"}
-              block
-              onClick={() => setConnectionMode("manual")}
-              data-testid="connection-mode-manual"
-            >
-              Manual entry
-            </Button>
-          </Flex>
-        )}
-
-        {selectedDatabase && connectionMode === "url" && (
+        {connectionMode === "url" && (
           <div>
             <Typography.Text strong>Connection URL</Typography.Text>
             <Input.TextArea
               data-testid="connection-url-input"
               style={{ marginTop: 8, fontFamily: "monospace" }}
-              placeholder={
-                selectedDatabase === "postgresql"
-                  ? "postgresql://username:password@host:5432/database"
-                  : "mysql://username:password@host:3306/database"
-              }
+              placeholder="postgresql://username:password@host:5432/database"
               value={connectionUrl}
               onChange={(e) => setConnectionUrl(e.target.value)}
               rows={3}
@@ -308,41 +283,33 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
           </div>
         )}
 
-        {selectedDatabase && connectionMode === "manual" && (
+        {connectionMode === "manual" && (
           <Space direction="vertical" size="small" style={{ width: "100%" }}>
             <Input placeholder="Host" value={host} onChange={(e) => setHost(e.target.value)} />
-            <Input
-              placeholder={selectedDatabase === "postgresql" ? "5432" : "3306"}
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-            />
+            <Input placeholder="5432" value={port} onChange={(e) => setPort(e.target.value)} />
             <Input placeholder="Database name" value={database} onChange={(e) => setDatabase(e.target.value)} />
             <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
             <Input.Password placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            {selectedDatabase === "postgresql" && (
-              <>
-                <Input
-                  data-testid="schema-input"
-                  placeholder="Schema (optional, default public)"
-                  value={schema}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSchema(val);
-                    if (val && /[^a-zA-Z0-9_]/.test(val)) {
-                      setSchemaError("Schema name can only contain letters, digits, and underscores");
-                    } else {
-                      setSchemaError("");
-                    }
-                  }}
-                  status={schemaError ? "error" : undefined}
-                />
-                {schemaError ? (
-                  <Typography.Text type="danger" style={{ fontSize: 12 }}>
-                    {schemaError}
-                  </Typography.Text>
-                ) : null}
-              </>
-            )}
+            <Input
+              data-testid="schema-input"
+              placeholder="Schema (optional, default public)"
+              value={schema}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSchema(val);
+                if (val && /[^a-zA-Z0-9_]/.test(val)) {
+                  setSchemaError("Schema name can only contain letters, digits, and underscores");
+                } else {
+                  setSchemaError("");
+                }
+              }}
+              status={schemaError ? "error" : undefined}
+            />
+            {schemaError ? (
+              <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                {schemaError}
+              </Typography.Text>
+            ) : null}
           </Space>
         )}
 
@@ -381,7 +348,7 @@ const DatabaseModal = ({ open, onOpenChange }: DatabaseModalProps) => {
             className="sql-gradient"
             style={{ border: "none" }}
             onClick={() => void handleConnect()}
-            disabled={!selectedDatabase || isConnecting}
+            disabled={isConnecting}
             data-testid="connect-database-button"
           >
             {isConnecting ? "Connecting…" : "Connect"}

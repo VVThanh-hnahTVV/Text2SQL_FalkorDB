@@ -36,21 +36,21 @@ export function useAdvices(data: Record<string, any>[] | undefined): Advice[] {
 export function adviceTypeToBuilderType(adviceType?: string): string | null {
   if (!adviceType) return null;
   const normalized = adviceType.toLowerCase();
-  if (normalized.includes('histogram')) return 'histogram';
-  if (normalized.includes('scatter')) return 'scatter';
-  if (normalized.includes('box')) return 'box';
   if (normalized.includes('pie') || normalized.includes('donut') || normalized.includes('ring')) {
     return 'pie';
   }
-  if (normalized.includes('line') || normalized.includes('area')) return 'line';
+  if (normalized.includes('line') || normalized.includes('area') || normalized.includes('scatter')) {
+    return 'line';
+  }
   if (
     normalized.includes('bar') ||
     normalized.includes('column') ||
-    normalized.includes('interval')
+    normalized.includes('interval') ||
+    normalized.includes('histogram') ||
+    normalized.includes('box')
   ) {
     return 'bar';
   }
-  if (normalized.includes('table')) return 'table';
   return null;
 }
 

@@ -6,10 +6,8 @@ export interface SpecOptions {
   labels?: string;
   values?: string;
   title?: string;
-  /** Series / group channel (bar, line, scatter). Omit or empty for single-series. */
+  /** Series / group channel (bar, line). Omit or empty for single-series. */
   color?: string;
-  /** Bubble size field (scatter only). */
-  size?: string;
   /** Used only when chartType is bar and color is set. */
   barLayout?: BarLayoutMode;
 }
@@ -44,7 +42,6 @@ export function buildG2Spec(
   };
 
   const color = opts.color?.trim();
-  const size = opts.size?.trim();
 
   switch (ct) {
     case 'bar': {
@@ -88,22 +85,6 @@ export function buildG2Spec(
         ...commonAxis,
       };
     }
-    case 'scatter': {
-      if (!opts.x || !opts.y) return null;
-      if (color && !channelsDistinct([opts.x, opts.y, color])) return null;
-      if (size && !channelsDistinct([opts.x, opts.y, ...(color ? [color] : []), size])) return null;
-      const encode: Record<string, string> = { x: opts.x, y: opts.y };
-      if (color) encode.color = color;
-      if (size) encode.size = size;
-
-      return {
-        type: 'point',
-        data,
-        encode,
-        axis: { x: { title: opts.x }, y: { title: opts.y } },
-        ...commonAxis,
-      };
-    }
     case 'pie': {
       const labels = opts.labels || opts.x;
       const values = opts.values || opts.y;
@@ -114,31 +95,6 @@ export function buildG2Spec(
         encode: { y: values, color: labels },
         transform: [{ type: 'stackY' }],
         coordinate: { type: 'theta' },
-        ...commonAxis,
-      };
-    }
-    case 'histogram': {
-      if (!opts.x) return null;
-      return {
-        type: 'rect',
-        data,
-        encode: { x: opts.x },
-        transform: [{ type: 'binX', y: 'count' }],
-        axis: { x: { title: opts.x }, y: { title: 'count' } },
-        ...commonAxis,
-      };
-    }
-    case 'box': {
-      if (!opts.y) return null;
-      if (opts.x && opts.x === opts.y) return null;
-      const encode: Record<string, string> = opts.x ? { x: opts.x, y: opts.y } : { y: opts.y };
-      const axis: Record<string, { title: string }> = { y: { title: opts.y } };
-      if (opts.x) axis.x = { title: opts.x };
-      return {
-        type: 'boxplot',
-        data,
-        encode,
-        axis,
         ...commonAxis,
       };
     }

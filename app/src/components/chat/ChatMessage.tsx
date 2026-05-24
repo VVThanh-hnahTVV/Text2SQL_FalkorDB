@@ -93,22 +93,18 @@ function AppAssistantAvatar() {
 const OPTIONAL_NONE_VALUE = '__none__';
 
 const isChartTypeSupported = (chartType: string) =>
-  ['line', 'bar', 'pie', 'scatter', 'histogram', 'box', 'table'].includes(chartType);
+  ['line', 'bar', 'pie'].includes(chartType);
 
 const CHART_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'bar', label: 'Cột (bar)' },
   { value: 'line', label: 'Đường (line)' },
-  { value: 'scatter', label: 'Phân tán (scatter)' },
   { value: 'pie', label: 'Tròn (pie)' },
-  { value: 'histogram', label: 'Histogram' },
-  { value: 'box', label: 'Box plot' },
-  { value: 'table', label: 'Bảng (table)' },
 ];
 
 const hasColumn = (queryData: any[], column?: string) =>
   Boolean(column && queryData.length > 0 && Object.prototype.hasOwnProperty.call(queryData[0], column));
 
-const channelsUniqueInDraft = (draft: ChartDraft, keys: Array<'x' | 'y' | 'color' | 'size'>) => {
+const channelsUniqueInDraft = (draft: ChartDraft, keys: Array<'x' | 'y' | 'color'>) => {
   const vals = keys.map((k) => draft[k]).filter(Boolean) as string[];
   return new Set(vals).size === vals.length;
 };
@@ -117,15 +113,11 @@ const canRenderDraftConfig = (queryData: any[], chartType: string, draft: ChartD
   if (!queryData || queryData.length === 0) return false;
   const ct = chartType.toLowerCase();
   if (!isChartTypeSupported(ct)) return false;
-  if (ct === 'line' || ct === 'bar' || ct === 'scatter') {
+  if (ct === 'line' || ct === 'bar') {
     if (!hasColumn(queryData, draft.x) || !hasColumn(queryData, draft.y)) return false;
     if (draft.color) {
       if (!hasColumn(queryData, draft.color)) return false;
       if (!channelsUniqueInDraft(draft, ['x', 'y', 'color'])) return false;
-    }
-    if (ct === 'scatter' && draft.size) {
-      if (!hasColumn(queryData, draft.size)) return false;
-      if (!channelsUniqueInDraft(draft, ['x', 'y', 'color', 'size'])) return false;
     }
     if (ct === 'bar' && draft.color && draft.barLayout !== 'grouped' && draft.barLayout !== 'stacked') {
       return false;
@@ -135,18 +127,7 @@ const canRenderDraftConfig = (queryData: any[], chartType: string, draft: ChartD
   if (ct === 'pie') {
     return hasColumn(queryData, draft.labels) && hasColumn(queryData, draft.values);
   }
-  if (ct === 'histogram') {
-    return hasColumn(queryData, draft.x);
-  }
-  if (ct === 'box') {
-    if (!hasColumn(queryData, draft.y)) return false;
-    if (draft.x) {
-      if (!hasColumn(queryData, draft.x) || draft.x === draft.y) return false;
-    }
-    return true;
-  }
-  // 'table' is rendered via the data table below; no chart needed.
-  return true;
+  return false;
 };
 
 type ChartDraft = {
@@ -155,10 +136,8 @@ type ChartDraft = {
   y: string;
   labels: string;
   values: string;
-  /** Series / group (bar, line, scatter). Empty = single series. */
+  /** Series / group (bar, line). Empty = single series. */
   color: string;
-  /** Bubble size (scatter). Empty = off. */
-  size: string;
   /** bar + color only: dodge vs stack */
   barLayout: 'grouped' | 'stacked';
 };
@@ -181,7 +160,6 @@ const deriveInitialDraft = (queryData: any[], topAdvice?: Advice): ChartDraft =>
     x,
     y,
     color: '',
-    size: '',
     barLayout: 'grouped',
   });
 
@@ -193,23 +171,6 @@ const deriveInitialDraft = (queryData: any[], topAdvice?: Advice): ChartDraft =>
       labels: pickColumn(columns, adviceAxes.labels, 0),
       values: pickColumn(columns, adviceAxes.values, columns.length > 1 ? 1 : 0),
       color: '',
-      size: '',
-      barLayout: 'grouped',
-    };
-  }
-
-  if (chartType === 'box') {
-    const boxY = pickColumn(columns, adviceAxes.y, columns.length > 1 ? 1 : 0);
-    const boxX =
-      adviceAxes.x && columns.includes(adviceAxes.x) && adviceAxes.x !== boxY ? adviceAxes.x : '';
-    return {
-      chartType,
-      x: boxX,
-      y: boxY,
-      labels: pickColumn(columns, adviceAxes.labels ?? x, 0),
-      values: pickColumn(columns, adviceAxes.values ?? y, columns.length > 1 ? 1 : 0),
-      color: '',
-      size: '',
       barLayout: 'grouped',
     };
   }
@@ -273,7 +234,7 @@ const ColumnSelect = ({
   </Flex>
 );
 
-/** Column picker with explicit &quot;Không&quot; for optional channels (color, size, box X). */
+/** Column picker with explicit &quot;Không&quot; for optional channels (color). */
 const OptionalColumnSelect = ({
   id,
   label,
@@ -342,19 +303,14 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
 
   const chartSpec = useMemo(() => {
     if (!applied) return null;
-    if (applied.chartType.toLowerCase() === 'table') return null;
     if (!canRenderDraftConfig(queryData, applied.chartType, applied)) return null;
     return buildG2Spec(queryData, applied.chartType, {
       title: chartPlotTitle.trim() || "Query Results",
-      x:
-        applied.chartType === 'box'
-          ? applied.x || undefined
-          : applied.x,
+      x: applied.x,
       y: applied.y,
       labels: applied.labels,
       values: applied.values,
       color: applied.color || undefined,
-      size: applied.size || undefined,
       barLayout:
         applied.chartType === 'bar' && applied.color ? applied.barLayout : undefined,
     });
@@ -467,7 +423,7 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
                 />
               </Flex>
 
-              {["line", "bar", "scatter"].includes(draft.chartType) ? (
+              {["line", "bar"].includes(draft.chartType) ? (
                 <>
                   <ColumnSelect
                     id="chart-x"
@@ -512,16 +468,6 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
                 </Flex>
               ) : null}
 
-              {draft.chartType === "scatter" ? (
-                <OptionalColumnSelect
-                  id="chart-size"
-                  label="Kích thước (size)"
-                  value={draft.size}
-                  columns={columns}
-                  onChange={(size) => setDraft((d) => ({ ...d, size }))}
-                />
-              ) : null}
-
               {draft.chartType === "pie" ? (
                 <>
                   <ColumnSelect
@@ -541,35 +487,6 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
                 </>
               ) : null}
 
-              {draft.chartType === "histogram" ? (
-                <ColumnSelect
-                  id="chart-hist-x"
-                  label="Cột (trục X)"
-                  value={draft.x}
-                  columns={columns}
-                  onChange={(x) => setDraft((d) => ({ ...d, x }))}
-                />
-              ) : null}
-
-              {draft.chartType === "box" ? (
-                <>
-                  <OptionalColumnSelect
-                    id="chart-box-x"
-                    label="Phân loại (X, tuỳ chọn)"
-                    value={draft.x}
-                    columns={columns}
-                    onChange={(x) => setDraft((d) => ({ ...d, x }))}
-                  />
-                  <ColumnSelect
-                    id="chart-box-y"
-                    label="Giá trị (Y)"
-                    value={draft.y}
-                    columns={columns}
-                    onChange={(y) => setDraft((d) => ({ ...d, y }))}
-                  />
-                </>
-              ) : null}
-
               <Button
                 type="primary"
                 size="small"
@@ -582,7 +499,7 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
               </Button>
             </Flex>
           </Flex>
-          {!canApply && draft.chartType !== "table" ? (
+          {!canApply ? (
             <Typography.Text type="danger" style={{ fontSize: 12 }}>
               Chọn đủ cột hợp lệ cho loại biểu đồ này.
             </Typography.Text>

@@ -142,7 +142,7 @@ class Config:
     DB_MAX_DISTINCT: int = 100  # pylint: disable=invalid-name
     DB_UNIQUENESS_THRESHOLD: float = 0.5  # pylint: disable=invalid-name
     SHORT_MEMORY_LENGTH = 5  # Maximum number of questions to keep in short-term memory
-    MAX_TABLES_FOR_ANALYSIS: int = int(os.getenv("MAX_TABLES_FOR_ANALYSIS", "4"))
+    MAX_TABLES_FOR_ANALYSIS: int = int(os.getenv("MAX_TABLES_FOR_ANALYSIS", "5"))
     print("**********MAX_TABLES_FOR_ANALYSIS**********", MAX_TABLES_FOR_ANALYSIS)
     # Top-K vector hits in graph find (FalkorDB queryNodes), separate for tables vs columns
     VECTOR_SEARCH_TOP_K_TABLES: int = max(

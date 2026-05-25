@@ -276,6 +276,9 @@ const ArchitectShell = ({
         style={{
           marginLeft: showDesktopSider ? SHELL_LEFT_WIDTH : 0,
           minHeight: "100vh",
+          height: "100dvh",
+          maxHeight: "100dvh",
+          overflow: "hidden",
           transition: "margin-left 0.2s",
         }}
       >
@@ -373,11 +376,23 @@ const ArchitectShell = ({
           style={{
             background: "#fff",
             marginRight: showDesktopRightRail ? SHELL_RIGHT_WIDTH : 0,
+            boxSizing: "border-box",
+            height: "100dvh",
             minHeight: "100vh",
+            maxHeight: "100dvh",
             paddingTop: headerHeight,
+            overflow: "hidden",
           }}
         >
-          <Content style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+          <Content
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              flex: 1,
+              overflow: "hidden",
+            }}
+          >
             {children}
           </Content>
 

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Button, Input, Flex, Typography } from "antd";
 import { SendOutlined } from "@ant-design/icons";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const { TextArea } = Input;
 
@@ -19,6 +20,7 @@ const QueryInput = ({
   schemaLabel,
 }: QueryInputProps) => {
   const [query, setQuery] = useState("");
+  const isMobile = useIsMobile();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,9 +48,13 @@ const QueryInput = ({
               onChange={(e) => setQuery(e.target.value)}
               placeholder={placeholder}
               disabled={disabled}
-              autoSize={{ minRows: 1, maxRows: 6 }}
+              autoSize={isMobile ? { minRows: 1, maxRows: 3 } : { minRows: 1, maxRows: 6 }}
               variant="borderless"
-              style={{ fontWeight: 500, color: "#1a1c1e" }}
+              style={{
+                fontWeight: 500,
+                color: "#1a1c1e",
+                ...(isMobile ? { maxHeight: 96, overflowY: "auto" } : undefined),
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !disabled) {
                   e.preventDefault();

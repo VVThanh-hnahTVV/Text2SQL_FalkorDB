@@ -218,8 +218,8 @@ const ColumnSelect = ({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) => (
-  <Flex vertical gap={6} style={{ minWidth: 0, flex: 1 }}>
-    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+  <div className="chart-builder-field">
+    <Typography.Text type="secondary" className="chart-builder-field-label">
       {label}
     </Typography.Text>
     <Select
@@ -229,9 +229,9 @@ const ColumnSelect = ({
       disabled={disabled || columns.length === 0}
       size="small"
       options={columns.map((col) => ({ value: col, label: col }))}
-      style={{ width: '100%' }}
+      style={{ width: "100%", marginTop: 6 }}
     />
-  </Flex>
+  </div>
 );
 
 /** Column picker with explicit &quot;Không&quot; for optional channels (color). */
@@ -250,23 +250,23 @@ const OptionalColumnSelect = ({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) => (
-  <Flex vertical gap={6} style={{ minWidth: 0, flex: 1 }}>
-    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+  <div className="chart-builder-field">
+    <Typography.Text type="secondary" className="chart-builder-field-label">
       {label}
     </Typography.Text>
     <Select
       id={id}
       value={value ? value : OPTIONAL_NONE_VALUE}
-      onChange={(v) => onChange(v === OPTIONAL_NONE_VALUE ? '' : v)}
+      onChange={(v) => onChange(v === OPTIONAL_NONE_VALUE ? "" : v)}
       disabled={disabled || columns.length === 0}
       size="small"
       options={[
-        { value: OPTIONAL_NONE_VALUE, label: 'Không' },
+        { value: OPTIONAL_NONE_VALUE, label: "Không" },
         ...columns.map((col) => ({ value: col, label: col })),
       ]}
-      style={{ width: '100%' }}
+      style={{ width: "100%", marginTop: 6 }}
     />
-  </Flex>
+  </div>
 );
 
 export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBodyProps) => {
@@ -346,7 +346,7 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
 
   return (
     <>
-      <Flex align="center" gap={8} wrap="wrap" style={{ marginBottom: 12 }}>
+      <Flex align="center" gap={8} wrap="wrap" style={{ marginBottom: 12, width: "100%" }}>
         <DatabaseOutlined style={{ color: "#006e1c", fontSize: 16 }} />
         <Typography.Text strong style={{ color: "#006e1c" }}>
           Query Results
@@ -354,7 +354,7 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
         {shouldVisualize && headerChartBadge ? (
           <Tag data-testid="query-results-chart-type-badge">{headerChartBadge}</Tag>
         ) : null}
-        <Space style={{ marginLeft: 'auto' }} wrap size={8} align="center">
+        <Space wrap size={8} align="center" style={{ marginLeft: "auto", maxWidth: "100%" }}>
           <Tag>{queryData?.length || 0} rows</Tag>
           <Button
             type="default"
@@ -381,6 +381,7 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
 
       {shouldVisualize && columns.length > 0 ? (
         <div
+          className="query-results-chart-builder"
           style={{
             marginBottom: 16,
             padding: 12,
@@ -395,8 +396,8 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
             <Typography.Text strong>Tạo biểu đồ</Typography.Text>.
           </Typography.Paragraph>
           <Flex vertical gap={12} style={{ width: "100%" }}>
-            <Flex vertical gap={6} style={{ width: "100%", maxWidth: 480 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <div className="chart-builder-title-row">
+              <Typography.Text type="secondary" className="chart-builder-field-label">
                 Tiêu đề biểu đồ
               </Typography.Text>
               <Input
@@ -406,11 +407,12 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
                 maxLength={120}
                 allowClear
                 data-testid="chart-plot-title-input"
+                style={{ marginTop: 6, width: "100%" }}
               />
-            </Flex>
-            <Flex gap={12} wrap="wrap" align="flex-end">
-              <Flex vertical gap={6} style={{ width: "100%", maxWidth: 200 }}>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            </div>
+            <div className="query-results-chart-builder-fields">
+              <div className="chart-builder-field chart-builder-field--chart-type">
+                <Typography.Text type="secondary" className="chart-builder-field-label">
                   Loại biểu đồ
                 </Typography.Text>
                 <Select
@@ -419,9 +421,9 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
                   size="small"
                   data-testid="chart-type-select"
                   options={CHART_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                  style={{ width: "100%" }}
+                  style={{ width: "100%", marginTop: 6 }}
                 />
-              </Flex>
+              </div>
 
               {["line", "bar"].includes(draft.chartType) ? (
                 <>
@@ -450,8 +452,8 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
               ) : null}
 
               {draft.chartType === "bar" && draft.color ? (
-                <Flex vertical gap={6} style={{ width: "100%", maxWidth: 160 }}>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                <div className="chart-builder-field">
+                  <Typography.Text type="secondary" className="chart-builder-field-label">
                     Kiểu cột
                   </Typography.Text>
                   <Select
@@ -463,9 +465,9 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
                       { value: "grouped", label: "Nhóm cột" },
                       { value: "stacked", label: "Chồng" },
                     ]}
-                    style={{ width: "100%" }}
+                    style={{ width: "100%", marginTop: 6 }}
                   />
-                </Flex>
+                </div>
               ) : null}
 
               {draft.chartType === "pie" ? (
@@ -490,14 +492,14 @@ export const QueryResultBody = ({ queryData, visualizationData }: QueryResultBod
               <Button
                 type="primary"
                 size="small"
-                style={{ alignSelf: "flex-end" }}
+                className="chart-builder-create-btn"
                 onClick={handleCreateChart}
                 disabled={!canApply}
                 data-testid="query-results-create-chart"
               >
                 Tạo biểu đồ
               </Button>
-            </Flex>
+            </div>
           </Flex>
           {!canApply ? (
             <Typography.Text type="danger" style={{ fontSize: 12 }}>
@@ -544,7 +546,7 @@ const QueryResultsTable = ({ queryData }: { queryData: any[] }) => {
     ellipsis: true,
   }));
   return (
-    <div style={{ maxWidth: "100%", overflow: "hidden" }}>
+    <div className="query-results-table-wrap">
       <Table
         size="small"
         data-testid="results-table"

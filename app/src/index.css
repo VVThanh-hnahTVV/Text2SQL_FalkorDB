@@ -321,6 +321,10 @@ h3,
   }
 }
 
+.chat-messages-container {
+  overscroll-behavior: contain;
+}
+
 .chat-input-footer {
   padding: 12px var(--page-padding-x) 20px;
 }
@@ -348,6 +352,82 @@ h3,
 
 .user-message-bubble {
   max-width: min(560px, 100%);
+}
+
+/* Query results — chart builder (stack on narrow screens) */
+.query-results-chart-builder {
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.query-results-chart-builder-fields {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+}
+
+.query-results-chart-builder .chart-builder-title-row {
+  width: 100%;
+  max-width: 480px;
+  flex: none;
+  box-sizing: border-box;
+}
+
+.query-results-chart-builder-fields .chart-builder-field {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.query-results-chart-builder-fields .chart-builder-field .ant-select {
+  width: 100%;
+}
+
+.query-results-chart-builder .chart-builder-field-label {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.query-results-chart-builder .chart-builder-create-btn {
+  width: 100%;
+}
+
+@media (min-width: 576px) {
+  .query-results-chart-builder-fields {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .query-results-chart-builder-fields .chart-builder-field {
+    flex: 1 1 160px;
+    min-width: 140px;
+    max-width: 100%;
+    width: auto;
+  }
+
+  .query-results-chart-builder-fields .chart-builder-field--chart-type {
+    flex: 0 1 200px;
+    max-width: 200px;
+  }
+
+  .query-results-chart-builder .chart-builder-create-btn {
+    width: auto;
+    flex: 0 0 auto;
+    align-self: flex-end;
+  }
+}
+
+.query-results-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Data Viewer — ER diagram drawer (fixed height, no infinite scroll) */

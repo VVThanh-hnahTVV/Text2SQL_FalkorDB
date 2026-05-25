@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Flex, Grid, Select, Skeleton, Spin, Typography } from "antd";
+import { Flex, Select, Skeleton, Spin, Typography } from "antd";
 import { useDatabase } from "@/contexts/DatabaseContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useChat, type ChatMessageData } from "@/contexts/ChatContext";
@@ -14,8 +14,6 @@ import { getVendorPrefix } from "@/utils/vendorConfig";
 import { getOrInitDemoRole, setDemoRole, type DemoRole } from "@/lib/demoRole";
 import { showToast } from "@/lib/notify";
 import { APP_LOGO_URL } from "@/lib/appLogo";
-
-import { SHELL_LEFT_WIDTH, SHELL_RIGHT_WIDTH } from "@/components/layout/shellLayout";
 
 /** Brave/Chromium: wheel over non-scrollable descendants may not scroll this ancestor — handle explicitly. */
 function isNestedVerticalScroller(node: HTMLElement, stopAt: HTMLElement): boolean {
@@ -59,27 +57,14 @@ const ChatInterface = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContentRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const inputFooterRef = useRef<HTMLDivElement>(null);
-  const [footerHeight, setFooterHeight] = useState(200);
-  const screens = Grid.useBreakpoint();
   const [demoRole, setDemoRoleState] = useState<DemoRole>(() => getOrInitDemoRole());
 
-  const footerInsetLeft = screens.md ? SHELL_LEFT_WIDTH : 0;
-  const footerInsetRight = screens.xl ? SHELL_RIGHT_WIDTH : 0;
-
-  /** Use `"auto"` by default: smooth scroll often misses the true bottom when layout keeps changing (skeleton, new blocks). */
+  /** Scroll only the messages pane — never scrollIntoView (that scrolls the document on mobile). */
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const root = chatContainerRef.current;
-    const sentinel = messagesEndRef.current;
-    if (root) {
-      const maxScroll = root.scrollHeight - root.clientHeight;
-      // Parent chain must bound height; if this div never overflows, scroll the nearest scrollport via sentinel.
-      if (maxScroll > 2) {
-        root.scrollTo({ top: root.scrollHeight, behavior });
-        return;
-      }
-    }
-    sentinel?.scrollIntoView({ behavior, block: "end" });
+    if (!root) return;
+    const maxScroll = Math.max(0, root.scrollHeight - root.clientHeight);
+    root.scrollTo({ top: maxScroll, behavior });
   }, []);
 
   // Brave/Chromium: wheel on message subtrees may not scroll this overflow parent; use non-passive wheel.
@@ -168,7 +153,7 @@ const ChatInterface = ({
       if (innerRaf) cancelAnimationFrame(innerRaf);
       for (const t of processingTimers) clearTimeout(t);
     };
-  }, [messages, isProcessing, footerHeight, scrollToBottom]);
+  }, [messages, isProcessing, scrollToBottom]);
 
   // Tables, charts, and Ant Design Skeleton often resize after paint without a React state change.
   useEffect(() => {
@@ -195,17 +180,6 @@ const ChatInterface = ({
   useEffect(() => {
     onProcessingChange?.(isProcessing);
   }, [isProcessing, onProcessingChange]);
-
-  // Measure the fixed footer height so paddingBottom keeps content above it
-  useEffect(() => {
-    const el = inputFooterRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => setFooterHeight(Math.ceil(el.getBoundingClientRect().height));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const handleSendMessage = async (query: string) => {
     if (isProcessing || disabled) return;
@@ -603,14 +577,12 @@ const ChatInterface = ({
     >
       <div
         ref={chatContainerRef}
-        className="custom-scrollbar"
+        className="custom-scrollbar chat-messages-container"
         style={{
           minHeight: 0,
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          overscrollBehaviorY: "auto",
-          paddingBottom: footerHeight,
           touchAction: "pan-y",
         }}
         data-testid="chat-messages-container"
@@ -643,14 +615,9 @@ const ChatInterface = ({
       </div>
 
       <div
-        ref={inputFooterRef}
         className="chat-input-footer"
         style={{
-          position: "fixed",
-          bottom: 0,
-          left: footerInsetLeft,
-          right: footerInsetRight,
-          zIndex: 45,
+          flexShrink: 0,
           borderTop: "1px solid #e0e3e6",
           background: "#fff",
           boxSizing: "border-box",
